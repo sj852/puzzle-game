@@ -1,0 +1,2245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>블록 퍼즐</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #e8f0fe, #d0e0ff);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            user-select: none;
+            overflow-x: hidden;
+        }
+        h1 { margin-top: 15px; font-size: 26px; color: #1a237e; }
+
+        /* Level badge + shape icon row */
+        #top-info {
+            display: flex; align-items: center; gap: 12px; margin: 6px 0 2px;
+        }
+        #level-badge {
+            background: linear-gradient(135deg, #ff6f00, #ff8f00);
+            color: white; font-weight: bold; font-size: 18px;
+            padding: 4px 14px; border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(255,111,0,0.3);
+        }
+        #current-shape-icon { font-size: 28px; }
+
+        /* Score area */
+        #score-area { text-align: center; margin: 4px 0; }
+        #score-board { font-size: 30px; font-weight: bold; color: #283593; }
+        #total-iq { font-size: 16px; color: #5c6bc0; font-weight: bold; margin-top: 2px; }
+
+        /* Combo */
+        #combo-display {
+            font-size: 14px; font-weight: bold; color: #e65100;
+            height: 20px; margin: 2px 0;
+        }
+        #combo-timer-bar {
+            width: 200px; height: 4px; background: #e0e0e0;
+            border-radius: 2px; margin: 0 auto 4px; overflow: hidden;
+        }
+        #combo-timer-fill {
+            height: 100%; width: 0%; background: linear-gradient(90deg, #ff6f00, #ff9800);
+            border-radius: 2px; transition: width 0.1s linear;
+        }
+
+        /* Combo popup */
+        #combo-popup {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 48px; font-weight: bold; color: #ff6f00;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            pointer-events: none; z-index: 9000;
+            opacity: 0; transition: none;
+        }
+        #combo-popup.show {
+            animation: comboPopAnim 0.8s ease-out forwards;
+        }
+        @keyframes comboPopAnim {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+            30% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -70%) scale(1); }
+        }
+
+        #message { height: 28px; font-size: 17px; color: #43a047; font-weight: bold; }
+
+        /* Shape selector */
+        #shape-selector { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; align-items: center; }
+        #shape-toggle {
+            display: none; /* hidden on desktop */
+            align-items: center; gap: 8px; padding: 8px 16px;
+            background: linear-gradient(135deg, #fff, #eef1f8); border: 2px solid #3f51b5;
+            border-radius: 14px; cursor: pointer; font-size: 15px; font-weight: bold;
+            color: #283593; box-shadow: 0 2px 8px rgba(63,81,181,0.15); transition: all 0.2s;
+        }
+        #shape-toggle:active { transform: scale(0.97); }
+        #shape-toggle .toggle-icon { font-size: 24px; }
+        #shape-toggle .toggle-name { flex: 1; }
+        #shape-toggle .toggle-arrow { font-size: 12px; transition: transform 0.3s; }
+        #shape-toggle.open .toggle-arrow { transform: rotate(180deg); }
+        #shape-tiers { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+        .tier-row {
+            display: flex; gap: 5px; align-items: center; flex-wrap: wrap; justify-content: center;
+        }
+        .tier-label {
+            font-size: 11px; font-weight: bold; color: #fff;
+            padding: 3px 10px; border-radius: 10px; margin-right: 4px;
+            white-space: nowrap; min-width: 45px; text-align: center;
+        }
+        .tier-label.tier-easy { background: #43a047; }
+        .tier-label.tier-normal { background: #fb8c00; }
+        .tier-label.tier-hard { background: #e53935; }
+        .shape-btn {
+            padding: 7px 16px; font-size: 22px; border: 2px solid #3f51b5;
+            border-radius: 12px; cursor: pointer; background: white; transition: all 0.2s;
+        }
+        .shape-btn.active { background: #3f51b5; border-color: #283593; transform: scale(1.1); }
+        .shape-btn:hover:not(.active) { background: #e8eaf6; }
+
+        #game-area { position: relative; margin: 8px auto; }
+        #grid-container {
+            display: inline-block; position: relative;
+            background: rgba(240,240,240,0.3); border-radius: 8px; padding: 2px;
+        }
+        #grid { display: grid; gap: 0; }
+        .cell { width: 30px; height: 30px; border-radius: 0; transition: background 0.15s; position: relative; }
+        .cell.empty { background: transparent; }
+        .cell.shape-cell {
+            background: linear-gradient(145deg, #eef2fb, #dce3f3);
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.08),
+                        inset -1px -1px 2px rgba(255,255,255,0.7);
+        }
+        .cell.shape-cell.highlight-valid { background: #a5d6a7; }
+        .cell.shape-cell.highlight-invalid { background: #ef9a9a; }
+        .cell.filled {
+            background: linear-gradient(145deg, #5c6bc0, #3949ab);
+            cursor: grab;
+            box-shadow: inset 2px 2px 4px rgba(255,255,255,0.25),
+                        inset -2px -2px 4px rgba(0,0,0,0.3),
+                        0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        #pieces-area {
+            display: flex; flex-wrap: wrap; justify-content: center;
+            gap: 12px; max-width: 700px; margin: 10px auto; padding: 8px;
+        }
+        .piece-wrapper {
+            cursor: grab; padding: 8px; background: linear-gradient(160deg, #ffffff, #eef1f8); border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1); display: flex;
+            flex-direction: column; align-items: center; transition: transform 0.18s, box-shadow 0.18s;
+        }
+        .piece-wrapper:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 8px 24px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.12); }
+        .piece-wrapper.dragging { opacity: 0.4; }
+        .piece-grid { display: grid; gap: 0; }
+        .piece-cell { border-radius: 0; }
+        .piece-cell.filled {
+            background: linear-gradient(145deg, #5c6bc0, #3949ab);
+            box-shadow: inset 1.5px 1.5px 3px rgba(255,255,255,0.3),
+                        inset -1.5px -1.5px 3px rgba(0,0,0,0.35),
+                        0 1px 2px rgba(0,0,0,0.15);
+        }
+        .piece-cell.empty { background: transparent; }
+        .piece-label { margin-top: 4px; font-size: 11px; font-weight: bold; color: #3f51b5; }
+
+        #drag-ghost { position: fixed; pointer-events: none; z-index: 1000; display: none; opacity: 0.85; }
+
+        #difficulty { display: flex; gap: 8px; margin: 5px 0 8px; }
+        .diff-btn {
+            padding: 7px 18px; font-size: 13px; font-weight: bold; border: 2px solid #3f51b5;
+            border-radius: 20px; cursor: pointer; background: white; color: #3f51b5; transition: all 0.2s;
+        }
+        .diff-btn.active { background: #3f51b5; color: white; }
+        .diff-btn:hover:not(.active) { background: #e8eaf6; }
+        #piece-count { font-size: 14px; color: #666; margin-bottom: 4px; }
+        #buttons { margin: 8px 0 25px; display: flex; gap: 12px; }
+        button {
+            padding: 9px 24px; font-size: 15px; font-weight: bold; border: none;
+            border-radius: 8px; cursor: pointer; transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.96); }
+        #undo-btn { background: #ff8f00; color: white; }
+        #undo-btn:disabled { background: #ccc; cursor: default; }
+        #reset-btn { background: #3f51b5; color: white; }
+        #new-btn { background: #43a047; color: white; }
+
+        /* Confetti */
+        .confetti {
+            position: fixed; pointer-events: none; z-index: 9999;
+            animation: confettiFall var(--dur) ease-in forwards;
+            animation-delay: var(--delay);
+            opacity: 0;
+        }
+        @keyframes confettiFall {
+            0% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+            50% { opacity: 1; }
+            100% { opacity: 0; transform: translateY(100vh) rotate(var(--rot)) scale(0.5); }
+        }
+
+        /* Win overlay */
+        #win-overlay {
+            display: none; position: fixed; inset: 0; z-index: 9998;
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+            justify-content: center; align-items: center; flex-direction: column;
+        }
+        #win-overlay.show { display: flex; animation: overlayIn 0.4s ease-out; }
+        @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+
+        #win-box {
+            background: white; border-radius: 20px; padding: 35px 50px; text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: winBoxIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes winBoxIn { from { transform: scale(0.3) rotate(-10deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+
+        #win-box .win-icon { font-size: 64px; animation: winPulse 1s ease-in-out infinite; }
+        @keyframes winPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+
+        #win-box .win-title { font-size: 28px; font-weight: bold; color: #1a237e; margin: 10px 0 5px; }
+        #win-box .win-sub { font-size: 18px; color: #666; margin-bottom: 4px; }
+        #win-box .win-level { font-size: 16px; color: #5c6bc0; font-weight: bold; margin-bottom: 4px; }
+        #win-box .win-stars { font-size: 36px; margin: 8px 0; }
+        #win-box .win-iq { font-size: 36px; font-weight: bold; color: #ff6f00; margin: 4px 0; }
+        #win-box .win-combo-max { font-size: 14px; color: #e65100; margin-bottom: 12px; }
+
+        #win-box button {
+            padding: 12px 36px; font-size: 17px; font-weight: bold; border: none;
+            border-radius: 12px; cursor: pointer; background: linear-gradient(135deg, #3f51b5, #1a237e);
+            color: white; box-shadow: 0 4px 15px rgba(63,81,181,0.4); transition: transform 0.15s;
+            margin: 4px;
+        }
+        #win-box button:hover { transform: scale(1.05); }
+        #win-buttons { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+        /* Grid cells shimmer on win */
+        .cell.win-shimmer {
+            animation: shimmer 0.6s ease-out forwards;
+            animation-delay: var(--sd);
+        }
+        @keyframes shimmer {
+            0% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.15); filter: brightness(1.8); background: #7c4dff; }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+
+        /* Firework burst */
+        .firework {
+            position: fixed; pointer-events: none; z-index: 9999;
+            width: 6px; height: 6px; border-radius: 50%;
+            animation: burst var(--bdur) ease-out forwards;
+            animation-delay: var(--bdelay);
+            opacity: 0;
+        }
+        @keyframes burst {
+            0% { opacity: 1; transform: translate(0,0) scale(1); }
+            100% { opacity: 0; transform: translate(var(--bx), var(--by)) scale(0); }
+        }
+        #hint-btn { background: #ffc107; color: #333; }
+        #hint-btn:disabled { background: #ccc; cursor: default; }
+        .cell.hint-highlight {
+            animation: hintBlink 0.5s ease-in-out 5;
+            z-index: 10; position: relative;
+        }
+        @keyframes hintBlink {
+            0%, 100% { background: #ffc107; box-shadow: 0 0 8px rgba(255,193,7,0.6); }
+            50% { background: #fff176; box-shadow: 0 0 16px rgba(255,241,118,0.9); }
+        }
+        .piece-wrapper.hint-piece {
+            box-shadow: 0 0 12px 4px rgba(255,193,7,0.7);
+            border: 2px solid #ffc107;
+        }
+        @media (max-width: 480px) {
+            h1 { font-size: 18px; margin-top: 4px; }
+            #top-info { margin: 2px 0 0; gap: 8px; }
+            #level-badge { font-size: 14px; padding: 2px 10px; }
+            #current-shape-icon { font-size: 22px; }
+            #shape-selector { gap: 3px; margin: 4px 0; }
+            #shape-toggle { display: flex; padding: 6px 14px; font-size: 14px; }
+            #shape-toggle .toggle-icon { font-size: 20px; }
+            #shape-tiers {
+                display: none; overflow: hidden;
+                width: 100%; padding: 0 8px;
+            }
+            #shape-tiers.open { display: flex; }
+            .shape-btn { padding: 4px 9px; font-size: 17px; }
+            .tier-label { font-size: 10px; padding: 2px 6px; }
+            #score-area { margin: 2px 0; }
+            #score-board { font-size: 20px; }
+            #total-iq { font-size: 13px; margin-top: 0; }
+            #combo-display { font-size: 12px; height: 16px; margin: 1px 0; }
+            #combo-timer-bar { height: 3px; margin: 0 auto 2px; }
+            #message { height: 20px; font-size: 14px; }
+            #game-area { margin: 4px auto; }
+            #grid-container { padding: 1px; }
+            #piece-count { font-size: 12px; margin-bottom: 2px; }
+            #pieces-area { gap: 6px; margin: 4px auto; padding: 4px; max-height: 25vh; overflow-y: auto; }
+            .piece-wrapper { padding: 4px; border-radius: 8px; }
+            .piece-wrapper:hover { transform: none; }
+            .piece-label { font-size: 9px; margin-top: 2px; }
+            #difficulty { gap: 6px; margin: 3px 0 4px; }
+            .diff-btn { padding: 4px 12px; font-size: 12px; }
+            #buttons { flex-wrap: wrap; gap: 5px; justify-content: center; margin: 4px 0 12px; }
+            button { padding: 6px 12px; font-size: 12px; }
+            #win-box { padding: 20px 20px; margin: 0 16px; max-width: calc(100vw - 32px); }
+            #win-box .win-title { font-size: 22px; }
+            #win-box .win-sub { font-size: 15px; }
+            #win-box .win-iq { font-size: 28px; }
+            #win-box .win-icon { font-size: 48px; }
+            #win-box .win-stars { font-size: 28px; }
+            #win-box button { padding: 10px 24px; font-size: 15px; }
+        }
+        @media (max-width: 360px) {
+            h1 { font-size: 16px; margin-top: 2px; }
+            #score-board { font-size: 18px; }
+            .shape-btn { padding: 3px 7px; font-size: 15px; }
+            .tier-label { font-size: 9px; padding: 2px 5px; }
+            #buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+            button { padding: 5px 8px; font-size: 11px; }
+            .piece-wrapper { padding: 3px; }
+            #win-box { padding: 16px 14px; }
+            #win-box .win-title { font-size: 19px; }
+            #win-box button { padding: 8px 18px; font-size: 14px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>블록 퍼즐</h1>
+    <div id="top-info">
+        <div id="level-badge">Lv.1</div>
+        <div id="current-shape-icon"></div>
+    </div>
+    <div id="shape-selector"></div>
+    <div id="score-area">
+        <div id="score-board">IQ = <span id="iq">100</span></div>
+        <div id="total-iq">총 IQ: 0</div>
+    </div>
+    <div id="combo-display"></div>
+    <div id="combo-timer-bar"><div id="combo-timer-fill"></div></div>
+    <div id="message"></div>
+    <div id="game-area">
+        <div id="grid-container"><div id="grid"></div></div>
+    </div>
+    <div id="piece-count"></div>
+    <div id="pieces-area"></div>
+    <div id="difficulty">
+        <button class="diff-btn active" data-diff="easy">쉬움</button>
+        <button class="diff-btn" data-diff="normal">보통</button>
+        <button class="diff-btn" data-diff="hard">어려움</button>
+    </div>
+    <div id="buttons">
+        <button id="hint-btn">💡 힌트</button>
+        <button id="undo-btn">↩ 되돌리기</button>
+        <button id="reset-btn">다시 시작</button>
+        <button id="new-btn">새 퍼즐</button>
+    </div>
+    <div id="drag-ghost"></div>
+    <div id="combo-popup"></div>
+    <div id="win-overlay">
+        <div id="win-box">
+            <div class="win-icon" id="win-icon"></div>
+            <div class="win-title">CLEAR!</div>
+            <div class="win-level" id="win-level"></div>
+            <div class="win-sub" id="win-sub"></div>
+            <div class="win-stars" id="win-stars"></div>
+            <div class="win-iq" id="win-iq"></div>
+            <div class="win-combo-max" id="win-combo-max"></div>
+            <div id="win-buttons">
+                <button id="win-next">다음 레벨 ▶</button>
+                <button id="win-retry" style="background: linear-gradient(135deg, #43a047, #2e7d32);">다시 하기</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ===================== SHAPES =====================
+const SHAPES = {
+    airplane: {
+        icon: '\u2708\uFE0F', name: '비행기', cols: 15, rows: 16,
+        data: [
+            [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,0,0,0,1,1,1,0,0,0],
+        ]
+    },
+    heart: {
+        icon: '\u2764\uFE0F', name: '하트', cols: 13, rows: 12,
+        data: [
+            [0,0,1,1,1,0,0,0,1,1,1,0,0],
+            [0,1,1,1,1,1,0,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,1,1,0,0,0,0],
+            [0,0,0,0,0,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0],
+        ]
+    },
+    star: {
+        icon: '\u2B50', name: '별', cols: 13, rows: 12,
+        data: [
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,0,0,0,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,0,0,0,1,1,1,0,0],
+            [0,1,1,1,0,0,0,0,0,1,1,1,0],
+            [1,1,1,0,0,0,0,0,0,0,1,1,1],
+        ]
+    },
+    diamond: {
+        icon: '\uD83D\uDC8E', name: '다이아몬드', cols: 11, rows: 9,
+        data: [
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+        ]
+    },
+    car: {
+        icon: '\uD83D\uDE97', name: '자동차', cols: 15, rows: 9,
+        data: [
+            [0,0,0,0,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,1,1,0,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,1,1,1,0,0,0,0,0,0,1,1,1,0],
+            [0,0,0,1,0,0,0,0,0,0,0,0,1,0,0],
+        ]
+    },
+    crown: {
+        icon: '\uD83D\uDC51', name: '왕관', cols: 13, rows: 10,
+        data: [
+            [1,0,0,0,0,0,1,0,0,0,0,0,1],
+            [1,1,0,0,0,1,1,1,0,0,0,1,1],
+            [1,1,1,0,0,1,1,1,0,0,1,1,1],
+            [1,1,1,0,1,1,1,1,1,0,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,1,1,0,0],
+        ]
+    },
+    umbrella: {
+        icon: '\u2602\uFE0F', name: '우산', cols: 13, rows: 13,
+        data: [
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,0,0,1,1,1,1,1,0,0,1,1],
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,0,0,0,0,0,0],
+        ]
+    },
+    anchor: {
+        icon: '\u2693', name: '닻', cols: 11, rows: 13,
+        data: [
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [1,0,0,0,0,1,0,0,0,0,1],
+            [1,1,0,0,0,1,0,0,0,1,1],
+            [1,1,1,0,0,1,0,0,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+        ]
+    },
+    cat: {
+        icon: '🐱', name: '고양이', cols: 11, rows: 13,
+        data: [
+            [1,1,0,0,0,0,0,0,0,1,1],
+            [1,1,1,0,0,0,0,0,1,1,1],
+            [1,1,1,1,0,0,0,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+        ]
+    },
+    dog: {
+        icon: '🐶', name: '강아지', cols: 13, rows: 11,
+        data: [
+            [0,1,1,0,0,0,0,0,0,0,0,0,0],
+            [1,1,1,1,0,0,0,0,0,0,0,0,0],
+            [1,1,1,1,1,1,1,1,1,1,0,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,0,0,1,1,0,0,1,1,0],
+            [0,0,1,1,0,0,1,1,0,0,1,1,0],
+            [0,0,1,1,0,0,1,1,0,0,1,1,0],
+            [0,0,1,1,0,0,0,0,0,0,1,1,0],
+        ]
+    },
+    butterfly: {
+        icon: '🦋', name: '나비', cols: 13, rows: 11,
+        data: [
+            [0,1,1,1,0,0,0,0,0,1,1,1,0],
+            [1,1,1,1,1,0,0,0,1,1,1,1,1],
+            [1,1,1,1,1,0,0,0,1,1,1,1,1],
+            [1,1,1,1,1,0,1,0,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,0,1,0,1,1,1,1,0],
+            [1,1,1,1,0,0,0,0,0,1,1,1,1],
+            [1,1,1,1,0,0,0,0,0,1,1,1,1],
+            [0,1,1,0,0,0,0,0,0,0,1,1,0],
+        ]
+    },
+    fish: {
+        icon: '🐟', name: '물고기', cols: 13, rows: 9,
+        data: [
+            [0,0,0,0,1,1,1,1,0,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [1,1,0,1,1,1,1,1,1,1,1,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,0,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,1,0,0,0,0,0],
+        ]
+    },
+    tree: {
+        icon: '🌲', name: '나무', cols: 11, rows: 13,
+        data: [
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+        ]
+    },
+    moon: {
+        icon: '🌙', name: '달', cols: 11, rows: 13,
+        data: [
+            [0,0,0,0,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,0,0,0],
+            [0,1,1,1,1,1,1,0,0,0,0],
+            [1,1,1,1,1,1,0,0,0,0,0],
+            [1,1,1,1,1,0,0,0,0,0,0],
+            [1,1,1,1,1,0,0,0,0,0,0],
+            [1,1,1,1,1,0,0,0,0,0,0],
+            [1,1,1,1,1,0,0,0,0,0,0],
+            [1,1,1,1,1,0,0,0,0,0,0],
+            [1,1,1,1,1,1,0,0,0,0,0],
+            [0,1,1,1,1,1,1,0,0,0,0],
+            [0,0,1,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,1,1,0,0],
+        ]
+    },
+    bell: {
+        icon: '🔔', name: '종', cols: 11, rows: 12,
+        data: [
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+        ]
+    },
+    house: {
+        icon: '🏠', name: '집', cols: 13, rows: 12,
+        data: [
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+        ]
+    },
+    rocket: {
+        icon: '🚀', name: '로켓', cols: 9, rows: 15,
+        data: [
+            [0,0,0,0,1,0,0,0,0],
+            [0,0,0,1,1,1,0,0,0],
+            [0,0,0,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1],
+            [1,1,0,1,1,1,0,1,1],
+            [1,0,0,1,1,1,0,0,1],
+            [0,0,0,0,1,0,0,0,0],
+            [0,0,0,1,0,1,0,0,0],
+        ]
+    },
+    yacht: {
+        icon: '⛵', name: '요트', cols: 13, rows: 12,
+        data: [
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,1,0,0,0],
+            [0,0,0,0,0,0,1,1,1,1,1,0,0],
+            [0,0,0,0,0,0,1,1,1,1,1,1,0],
+            [0,0,0,0,0,0,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,1,1,0,0,0,0],
+        ]
+    },
+    train: {
+        icon: '🚂', name: '기차', cols: 15, rows: 9,
+        data: [
+            [0,0,0,0,0,0,0,0,0,1,1,1,1,0,0],
+            [0,0,0,0,0,0,0,0,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,1,1,1,0,0,1,1,1,0,0,1,1,0],
+            [0,0,0,1,0,0,0,0,1,0,0,0,0,1,0],
+        ]
+    },
+    musicNote: {
+        icon: '🎵', name: '음표', cols: 9, rows: 13,
+        data: [
+            [0,0,0,0,0,0,1,1,1],
+            [0,0,0,0,0,0,1,1,1],
+            [0,0,0,0,0,0,1,1,1],
+            [0,0,0,0,0,0,1,0,0],
+            [0,0,0,0,0,0,1,0,0],
+            [0,0,0,0,0,0,1,0,0],
+            [0,0,0,0,0,0,1,0,0],
+            [0,0,0,0,0,0,1,0,0],
+            [0,0,0,0,0,0,1,0,0],
+            [0,0,0,0,0,0,1,0,0],
+            [0,0,0,0,0,1,1,0,0],
+            [0,0,0,0,1,1,1,1,0],
+            [0,0,0,0,0,1,1,0,0],
+        ]
+    },
+    lightning: {
+        icon: '⚡', name: '번개', cols: 9, rows: 13,
+        data: [
+            [0,0,0,0,0,1,1,1,1],
+            [0,0,0,0,1,1,1,1,0],
+            [0,0,0,0,1,1,1,0,0],
+            [0,0,0,1,1,1,0,0,0],
+            [0,0,1,1,1,1,0,0,0],
+            [0,1,1,1,1,1,0,0,0],
+            [1,1,1,1,1,1,1,1,1],
+            [0,0,0,1,1,1,1,1,0],
+            [0,0,0,1,1,1,0,0,0],
+            [0,0,1,1,1,0,0,0,0],
+            [0,0,1,1,1,0,0,0,0],
+            [0,1,1,1,0,0,0,0,0],
+            [1,1,1,1,0,0,0,0,0],
+        ]
+    },
+    christmasTree: {
+        icon: '🎄', name: '트리', cols: 13, rows: 14,
+        data: [
+            [0,0,0,0,0,0,1,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,1,1,0,0,0,0],
+            [0,0,0,0,0,1,1,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,0,0,0,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,1,1,0,0,0,0],
+        ]
+    },
+    penguin: {
+        icon: '🐧', name: '펭귄', cols: 11, rows: 13,
+        data: [
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,0,1,1,1,1,1,0,1,1],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,0,0,0,1,1,0,0],
+        ]
+    },
+    whale: {
+        icon: '🐋', name: '고래', cols: 15, rows: 9,
+        data: [
+            [0,0,0,0,0,0,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [1,1,0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,0,0,0,1,1,1,1,1,0,0,0,0],
+        ]
+    },
+    guitar: {
+        icon: '🎸', name: '기타', cols: 7, rows: 15,
+        data: [
+            [0,0,0,0,0,1,1],
+            [0,0,0,0,0,1,1],
+            [0,0,0,0,1,1,0],
+            [0,0,0,0,1,0,0],
+            [0,0,0,0,1,0,0],
+            [0,0,0,0,1,0,0],
+            [0,0,0,0,1,0,0],
+            [0,0,0,0,1,0,0],
+            [0,0,0,1,1,1,0],
+            [0,0,1,1,1,1,1],
+            [0,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1],
+            [0,0,1,1,1,1,1],
+            [0,0,0,1,1,1,0],
+        ]
+    },
+    key: {
+        icon: '🔑', name: '열쇠', cols: 13, rows: 7,
+        data: [
+            [0,0,0,0,0,0,0,0,0,1,1,1,0],
+            [1,1,1,0,1,1,0,0,1,1,0,1,1],
+            [1,1,1,1,1,1,1,1,1,1,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,0,1,1,0,0,1,1,0,0,1],
+            [0,0,0,0,0,0,0,0,0,1,1,1,1],
+            [0,0,0,0,0,0,0,0,0,0,1,1,0],
+        ]
+    },
+    flower: {
+        icon: '🌸', name: '꽃', cols: 11, rows: 11,
+        data: [
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,1,0,0,1,1,1,0,0,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,0,0,1,1,1,0,0,1,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+        ]
+    },
+    sword: {
+        icon: '⚔️', name: '검', cols: 7, rows: 15,
+        data: [
+            [0,0,0,1,0,0,0],
+            [0,0,1,1,1,0,0],
+            [0,0,1,1,1,0,0],
+            [0,0,1,1,1,0,0],
+            [0,0,1,1,1,0,0],
+            [0,0,1,1,1,0,0],
+            [0,0,1,1,1,0,0],
+            [0,0,1,1,1,0,0],
+            [0,0,1,1,1,0,0],
+            [0,0,1,1,1,0,0],
+            [0,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1],
+            [0,0,0,1,0,0,0],
+            [0,0,0,1,0,0,0],
+            [0,0,1,1,1,0,0],
+        ]
+    },
+    shield: {
+        icon: '🛡️', name: '방패', cols: 11, rows: 13,
+        data: [
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+        ]
+    },
+    trophy: {
+        icon: '🏆', name: '트로피', cols: 11, rows: 12,
+        data: [
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,0,1,1,1,1,1,0,1,1],
+            [1,1,0,1,1,1,1,1,0,1,1],
+            [0,1,0,0,1,1,1,0,0,1,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+        ]
+    },
+    // ===== NEW EASY SHAPES =====
+    cup: {
+        icon: '☕', name: '컵', cols: 9, rows: 9,
+        data: [
+            [0,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,0,0,0],
+            [0,1,1,1,1,1,0,0,0],
+            [0,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,0,0,0],
+            [0,1,1,1,1,1,1,1,0],
+        ]
+    },
+    cherry: {
+        icon: '🍒', name: '체리', cols: 9, rows: 9,
+        data: [
+            [0,0,0,0,1,0,0,0,0],
+            [0,0,0,1,0,1,0,0,0],
+            [0,0,1,0,0,0,1,0,0],
+            [0,1,0,0,0,0,0,1,0],
+            [0,1,0,0,0,0,0,1,0],
+            [1,1,1,0,0,0,1,1,1],
+            [1,1,1,0,0,0,1,1,1],
+            [1,1,1,0,0,0,1,1,1],
+            [0,1,0,0,0,0,0,1,0],
+        ]
+    },
+    arrow: {
+        icon: '➡️', name: '화살표', cols: 11, rows: 7,
+        data: [
+            [0,0,0,0,0,0,1,0,0,0,0],
+            [0,0,0,0,0,0,1,1,0,0,0],
+            [1,1,1,1,1,1,1,1,1,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,0,0,0,1,1,0,0,0],
+            [0,0,0,0,0,0,1,0,0,0,0],
+        ]
+    },
+    candy: {
+        icon: '🍬', name: '사탕', cols: 9, rows: 11,
+        data: [
+            [0,0,0,1,0,0,0,0,0],
+            [0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,0,0,0,0],
+            [0,0,0,0,1,1,0,0,0],
+            [0,0,0,0,1,1,1,0,0],
+            [0,0,0,1,1,1,1,0,0],
+            [0,0,1,1,1,0,0,0,0],
+            [0,0,1,1,0,0,0,0,0],
+            [0,1,1,0,0,0,0,0,0],
+            [0,1,1,1,0,0,0,0,0],
+            [0,0,1,0,0,0,0,0,0],
+        ]
+    },
+    // ===== NEW NORMAL SHAPES =====
+    apple: {
+        icon: '🍎', name: '사과', cols: 11, rows: 11,
+        data: [
+            [0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,0,1,1,0,0,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0],
+        ]
+    },
+    clover: {
+        icon: '🍀', name: '클로버', cols: 11, rows: 11,
+        data: [
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0],
+        ]
+    },
+    // ===== NEW HARD SHAPES =====
+    castle: {
+        icon: '🏰', name: '성', cols: 15, rows: 11,
+        data: [
+            [1,0,1,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,1,1,0,0,0,1,1,1,0,0,0,1,1,1],
+            [1,1,1,0,0,0,1,1,1,0,0,0,1,1,1],
+            [1,1,1,0,0,0,1,1,1,0,0,0,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,0,0,0,1,1,1,1,1,1],
+            [1,1,1,1,1,1,0,0,0,1,1,1,1,1,1],
+            [1,1,1,1,1,1,0,0,0,1,1,1,1,1,1],
+        ]
+    },
+    dragon: {
+        icon: '🐉', name: '용', cols: 15, rows: 11,
+        data: [
+            [0,0,0,0,0,0,0,0,1,1,1,1,1,0,0],
+            [0,0,0,0,0,0,0,1,1,1,1,1,1,1,0],
+            [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1],
+            [0,0,0,0,0,1,1,1,1,1,1,1,1,1,0],
+            [1,0,0,0,1,1,1,1,1,1,1,1,1,0,0],
+            [1,1,0,1,1,1,1,1,1,1,1,1,0,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,1,1,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0,0,0,0,0,0],
+            [0,0,0,1,1,0,1,1,0,0,0,0,0,0,0],
+        ]
+    },
+};
+
+let currentShapeKey = 'airplane';
+let CURRENT_SHAPE = SHAPES[currentShapeKey];
+let COLS, ROWS, SHAPE_DATA, totalShapeCells;
+
+function loadShape() {
+    CURRENT_SHAPE = SHAPES[currentShapeKey];
+    COLS = CURRENT_SHAPE.cols;
+    ROWS = CURRENT_SHAPE.rows;
+    SHAPE_DATA = CURRENT_SHAPE.data;
+    totalShapeCells = 0;
+    for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+            if (SHAPE_DATA[r] && SHAPE_DATA[r][c]) totalShapeCells++;
+}
+
+// ===================== DIFFICULTY =====================
+const DIFFICULTY = {
+    easy:   { targetPieces: 6,  rotate: false },
+    normal: { targetPieces: 10, rotate: true },
+    hard:   { targetPieces: 18, rotate: true },
+};
+let currentDifficulty = 'easy';
+
+// ===================== LEVEL SYSTEM =====================
+let currentLevel = 1;
+let totalIQ = 0;
+// Shapes categorized by cell count (12 / 13 / 12)
+const SHAPE_TIERS = {
+    // ~30-71 cells: small, simple shapes (12)
+    easy: ['key', 'cherry', 'candy', 'arrow', 'cup', 'lightning', 'musicNote', 'guitar', 'sword', 'rocket',
+           'moon', 'diamond'],
+    // ~88-107 cells: medium complexity (13)
+    normal: ['clover', 'trophy', 'anchor', 'flower', 'apple', 'bell', 'tree', 'penguin',
+             'yacht', 'fish', 'star', 'shield', 'christmasTree'],
+    // ~108-182 cells: large, complex shapes (12)
+    hard: ['dog', 'butterfly', 'castle', 'dragon', 'crown', 'heart',
+           'train', 'car', 'whale', 'house', 'airplane', 'umbrella'],
+};
+
+// Track which shapes have been used per tier to avoid repeats
+let usedShapes = { easy: [], normal: [], hard: [] };
+
+function getDifficultyForLevel(level) {
+    if (level <= 5) return 'easy';
+    if (level <= 12) return 'normal';
+    return 'hard';
+}
+
+function getShapeForLevel(level) {
+    const diff = getDifficultyForLevel(level);
+    const pool = SHAPE_TIERS[diff];
+    const used = usedShapes[diff];
+
+    // Filter out already-used shapes
+    let available = pool.filter(s => !used.includes(s));
+
+    // If all used up, reset the used list (but avoid the last played shape)
+    if (available.length === 0) {
+        const lastUsed = used[used.length - 1];
+        usedShapes[diff] = lastUsed ? [lastUsed] : [];
+        available = pool.filter(s => s !== lastUsed);
+    }
+
+    // Pick a random shape from available
+    const pick = available[Math.floor(Math.random() * available.length)];
+    usedShapes[diff].push(pick);
+    return pick;
+}
+
+function updateLevelUI() {
+    document.getElementById('level-badge').textContent = `Lv.${currentLevel}`;
+    document.getElementById('current-shape-icon').textContent = CURRENT_SHAPE.icon;
+    document.getElementById('total-iq').textContent = `총 IQ: ${totalIQ}`;
+    // Sync difficulty buttons
+    document.querySelectorAll('.diff-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.diff === currentDifficulty);
+    });
+}
+
+// ===================== IQ SCORING =====================
+const IQ_BONUS = { easy: 17, normal: 10, hard: 6 };
+const IQ_BASE = 100;
+const UNDO_PENALTY = 5;
+const HINT_PENALTY = 15;
+const PICKUP_PENALTY = 3;
+
+// ===================== COMBO SYSTEM =====================
+let comboCount = 0;
+let comboMaxThisLevel = 0;
+let lastPlaceTime = 0;
+let comboTimerId = null;
+const COMBO_WINDOW = 10000; // 10 seconds
+const MAX_COMBO = 5;
+
+function resetCombo() {
+    comboCount = 0;
+    lastPlaceTime = 0;
+    if (comboTimerId) { clearInterval(comboTimerId); comboTimerId = null; }
+    document.getElementById('combo-display').textContent = '';
+    document.getElementById('combo-timer-fill').style.width = '0%';
+}
+
+function onPiecePlace() {
+    const now = Date.now();
+    if (lastPlaceTime > 0 && (now - lastPlaceTime) <= COMBO_WINDOW) {
+        comboCount = Math.min(comboCount + 1, MAX_COMBO);
+    } else {
+        comboCount = 1;
+    }
+    lastPlaceTime = now;
+    if (comboCount > comboMaxThisLevel) comboMaxThisLevel = comboCount;
+
+    // Update combo display
+    if (comboCount >= 2) {
+        document.getElementById('combo-display').textContent = `COMBO x${comboCount}!`;
+        showComboPopup(comboCount);
+    } else {
+        document.getElementById('combo-display').textContent = '';
+    }
+
+    // Start/restart combo timer
+    if (comboTimerId) clearInterval(comboTimerId);
+    comboTimerId = setInterval(() => {
+        const elapsed = Date.now() - lastPlaceTime;
+        const remaining = Math.max(0, COMBO_WINDOW - elapsed);
+        const pct = (remaining / COMBO_WINDOW) * 100;
+        document.getElementById('combo-timer-fill').style.width = pct + '%';
+        if (remaining <= 0) {
+            resetCombo();
+        }
+    }, 50);
+
+    return comboCount;
+}
+
+function showComboPopup(count) {
+    const popup = document.getElementById('combo-popup');
+    popup.textContent = `COMBO x${count}!`;
+    popup.classList.remove('show');
+    void popup.offsetWidth; // force reflow
+    popup.classList.add('show');
+    setTimeout(() => popup.classList.remove('show'), 800);
+}
+
+// ===================== STAR RATING =====================
+let hintUsedCount = 0;
+let undoUsedCount = 0;
+
+function calcStars() {
+    if (hintUsedCount === 0 && undoUsedCount === 0) return 3;
+    if (hintUsedCount <= 1 && undoUsedCount <= 2) return 2;
+    return 1;
+}
+
+function starsToText(stars) {
+    return '★'.repeat(stars) + '☆'.repeat(3 - stars);
+}
+
+// ===================== GAME STATE =====================
+let grid = [], pieces = [], iq = IQ_BASE, filledCount = 0;
+let storedSolution = null; // stored solution from generation for reliable hints
+let draggingPiece = null, draggingIdx = -1;
+let cellOwner = {};
+let history = [];
+
+const gridEl = document.getElementById('grid');
+const piecesEl = document.getElementById('pieces-area');
+const iqEl = document.getElementById('iq');
+const msgEl = document.getElementById('message');
+const ghostEl = document.getElementById('drag-ghost');
+
+// Curved border-radius: round corners where no neighbor exists
+function calcBorderRadius(shape, r, c, sz) {
+    const rad = Math.round(sz * 0.42) + 'px';
+    const has = (dr, dc) => {
+        const nr = r + dr, nc = c + dc;
+        return nr >= 0 && nr < shape.length && nc >= 0 && nc < shape[0].length && shape[nr][nc];
+    };
+    const tl = (!has(-1, 0) && !has(0, -1)) ? rad : '0';
+    const tr = (!has(-1, 0) && !has(0, 1)) ? rad : '0';
+    const bl = (!has(1, 0) && !has(0, -1)) ? rad : '0';
+    const br = (!has(1, 0) && !has(0, 1)) ? rad : '0';
+    return `${tl} ${tr} ${br} ${bl}`;
+}
+
+// Apply smooth border styling to a piece cell (for piece panel & drag ghost)
+function applyPieceCellBorder(cell, shape, r, c) {
+    const has = (dr, dc) => {
+        const nr = r + dr, nc = c + dc;
+        return nr >= 0 && nr < shape.length && nc >= 0 && nc < shape[0].length && shape[nr][nc];
+    };
+    if (!shape[r][c]) return;
+    const top = !has(-1,0), bot = !has(1,0), lft = !has(0,-1), rgt = !has(0,1);
+    // Beveled edges: top/left = highlight, bottom/right = shadow
+    const hlW = '2px', shW = '2.5px';
+    const hlC = 'rgba(255,255,255,0.45)';  // light highlight
+    const shC = '#0d1557';                  // deep shadow
+    const iw = '0.5px';
+    const ic = 'rgba(255,255,255,0.1)';
+    cell.style.borderTop    = top ? `${hlW} solid ${hlC}` : `${iw} solid ${ic}`;
+    cell.style.borderLeft   = lft ? `${hlW} solid ${hlC}` : `${iw} solid ${ic}`;
+    cell.style.borderBottom = bot ? `${shW} solid ${shC}` : `${iw} solid ${ic}`;
+    cell.style.borderRight  = rgt ? `${shW} solid ${shC}` : `${iw} solid ${ic}`;
+}
+
+// ===================== SHAPE SELECTOR =====================
+function buildShapeSelector() {
+    const sel = document.getElementById('shape-selector');
+    sel.innerHTML = '';
+
+    // Toggle button (visible only on mobile via CSS)
+    const toggle = document.createElement('div');
+    toggle.id = 'shape-toggle';
+    toggle.innerHTML = `<span class="toggle-icon">${SHAPES[currentShapeKey].icon}</span><span class="toggle-name">${SHAPES[currentShapeKey].name}</span><span class="toggle-arrow">▼</span>`;
+    toggle.addEventListener('click', () => {
+        toggle.classList.toggle('open');
+        document.getElementById('shape-tiers').classList.toggle('open');
+    });
+    sel.appendChild(toggle);
+
+    // Tiers container
+    const tiersEl = document.createElement('div');
+    tiersEl.id = 'shape-tiers';
+
+    const tiers = [
+        { key: 'easy', label: '쉬움' },
+        { key: 'normal', label: '보통' },
+        { key: 'hard', label: '어려움' },
+    ];
+    tiers.forEach(tier => {
+        const row = document.createElement('div');
+        row.classList.add('tier-row');
+        const label = document.createElement('span');
+        label.classList.add('tier-label', `tier-${tier.key}`);
+        label.textContent = tier.label;
+        row.appendChild(label);
+        for (const key of SHAPE_TIERS[tier.key]) {
+            const btn = document.createElement('button');
+            btn.classList.add('shape-btn');
+            btn.dataset.shapeKey = key;
+            if (key === currentShapeKey) btn.classList.add('active');
+            btn.textContent = SHAPES[key].icon;
+            btn.title = SHAPES[key].name;
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentShapeKey = key;
+                loadShape();
+                newGame();
+                updateShapeToggle();
+                // Auto-close on mobile after selection
+                if (window.innerWidth <= 480) {
+                    toggle.classList.remove('open');
+                    document.getElementById('shape-tiers').classList.remove('open');
+                }
+            });
+            row.appendChild(btn);
+        }
+        tiersEl.appendChild(row);
+    });
+    sel.appendChild(tiersEl);
+}
+
+function updateShapeToggle() {
+    const toggle = document.getElementById('shape-toggle');
+    if (!toggle) return;
+    toggle.querySelector('.toggle-icon').textContent = SHAPES[currentShapeKey].icon;
+    toggle.querySelector('.toggle-name').textContent = SHAPES[currentShapeKey].name;
+}
+
+// ===================== GRID =====================
+function isShape(r, c) {
+    return r >= 0 && r < ROWS && c >= 0 && c < COLS && SHAPE_DATA[r] && SHAPE_DATA[r][c];
+}
+
+function initGrid() {
+    grid = []; filledCount = 0; cellOwner = {}; history = [];
+    updateUndoBtn();
+    gridEl.innerHTML = '';
+    const cs = getCellSize();
+    gridEl.style.gridTemplateColumns = `repeat(${COLS}, ${cs}px)`;
+
+    for (let r = 0; r < ROWS; r++) {
+        grid[r] = [];
+        for (let c = 0; c < COLS; c++) {
+            const cell = document.createElement('div');
+            cell.classList.add('cell');
+            cell.dataset.row = r; cell.dataset.col = c;
+            cell.style.width = cs + 'px'; cell.style.height = cs + 'px';
+            if (isShape(r, c)) {
+                cell.classList.add('shape-cell');
+                grid[r][c] = 0;
+                applyShapeCellStyle(cell, r, c, cs);
+            } else {
+                cell.classList.add('empty');
+                grid[r][c] = -1;
+            }
+            cell.addEventListener('mousedown', onGridCellDown);
+            cell.addEventListener('touchstart', onGridCellDown, { passive: false });
+            gridEl.appendChild(cell);
+        }
+    }
+}
+
+// Apply smooth outline + border-radius to a shape cell
+function applyShapeCellStyle(cell, r, c, cs) {
+    const bw = 2.5;  // outer border width
+    const iw = 0.5;  // inner grid line width
+    const bc = '#37474f';
+    const ic = 'rgba(0,0,0,0.08)';
+
+    const top = !isShape(r-1,c);
+    const bot = !isShape(r+1,c);
+    const lft = !isShape(r,c-1);
+    const rgt = !isShape(r,c+1);
+
+    // Outer edges get thick border, inner edges get subtle line
+    cell.style.borderTop    = top ? `${bw}px solid ${bc}` : `${iw}px solid ${ic}`;
+    cell.style.borderBottom = bot ? `${bw}px solid ${bc}` : `${iw}px solid ${ic}`;
+    cell.style.borderLeft   = lft ? `${bw}px solid ${bc}` : `${iw}px solid ${ic}`;
+    cell.style.borderRight  = rgt ? `${bw}px solid ${bc}` : `${iw}px solid ${ic}`;
+
+    cell.style.borderRadius = calcShapeRadius(r, c, cs);
+}
+
+// Calculate border-radius for shape cells with convex corner rounding
+function calcShapeRadius(r, c, cs) {
+    const rad = Math.round(cs * 0.42) + 'px';
+    const top = !isShape(r-1,c);
+    const bot = !isShape(r+1,c);
+    const lft = !isShape(r,c-1);
+    const rgt = !isShape(r,c+1);
+
+    const tl = (top && lft) ? rad : '0';
+    const tr = (top && rgt) ? rad : '0';
+    const br = (bot && rgt) ? rad : '0';
+    const bl = (bot && lft) ? rad : '0';
+    return `${tl} ${tr} ${br} ${bl}`;
+}
+
+function onGridCellDown(e) {
+    const r = parseInt(e.currentTarget.dataset.row);
+    const c = parseInt(e.currentTarget.dataset.col);
+    const key = `${r},${c}`;
+    if (cellOwner[key] === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const pidx = cellOwner[key];
+    // Remove from history
+    const hi = history.lastIndexOf(pidx);
+    if (hi !== -1) history.splice(hi, 1);
+    updateUndoBtn();
+    removePieceFromGrid(pidx, true); // true = pickup from grid
+    startDrag(e, pidx);
+}
+
+function getCellSize() {
+    const maxGridWidth = Math.min(window.innerWidth - 20, 500);
+    let cs = Math.floor(maxGridWidth / COLS);
+    // On mobile, also constrain by available height so grid doesn't overflow
+    if (window.innerWidth <= 480) {
+        const maxGridHeight = Math.floor(window.innerHeight * 0.42);
+        const csFromHeight = Math.floor(maxGridHeight / ROWS);
+        cs = Math.min(cs, csFromHeight);
+    }
+    return Math.max(14, Math.min(cs, 30));
+}
+
+// ===================== PIECES =====================
+function rotatePiece(shape) {
+    const rows = shape.length, cols = shape[0].length;
+    const rotated = [];
+    for (let c = 0; c < cols; c++) {
+        rotated[c] = [];
+        for (let r = rows - 1; r >= 0; r--) rotated[c].push(shape[r][c]);
+    }
+    return rotated;
+}
+
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+}
+
+function generatePiecesRaw() {
+    const diff = DIFFICULTY[currentDifficulty];
+    const targetPieces = diff.targetPieces;
+    const avgSize = Math.max(3, Math.round(totalShapeCells / targetPieces));
+
+    const unassigned = [];
+    for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+            if (isShape(r, c)) unassigned.push([r, c]);
+
+    const assigned = new Set();
+
+    function growPiece(startR, startC, targetSize) {
+        const cells = [[startR, startC]];
+        assigned.add(`${startR},${startC}`);
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        let lastDir = null, attempts = 0;
+
+        while (cells.length < targetSize && attempts < 300) {
+            attempts++;
+            const fromIdx = Math.random() < 0.6 ? cells.length - 1 : Math.floor(Math.random() * cells.length);
+            const [cr, cc] = cells[fromIdx];
+            const sd = [...dirs].sort(() => Math.random() - 0.5);
+
+            let ordered;
+            if (lastDir && Math.random() < 0.5) {
+                const perp = sd.filter(d => d[0] !== lastDir[0] && d[1] !== lastDir[1]);
+                ordered = [...perp, ...sd.filter(d => !perp.includes(d))];
+            } else {
+                ordered = sd;
+            }
+
+            for (const [dr, dc] of ordered) {
+                const nr = cr + dr, nc = cc + dc;
+                const key = `${nr},${nc}`;
+                if (isShape(nr, nc) && !assigned.has(key)) {
+                    cells.push([nr, nc]);
+                    assigned.add(key);
+                    lastDir = [dr, dc];
+                    break;
+                }
+            }
+        }
+        return cells;
+    }
+
+    shuffle(unassigned);
+    const result = [];
+
+    for (const [r, c] of unassigned) {
+        if (assigned.has(`${r},${c}`)) continue;
+        const size = Math.max(3, avgSize + Math.floor(Math.random() * 5) - 2);
+        const cells = growPiece(r, c, size);
+
+        if (cells.length > 0) {
+            const minR = Math.min(...cells.map(c => c[0]));
+            const minC = Math.min(...cells.map(c => c[1]));
+            const maxR = Math.max(...cells.map(c => c[0]));
+            const maxC = Math.max(...cells.map(c => c[1]));
+            const rows = maxR - minR + 1, cols = maxC - minC + 1;
+            const shape = Array.from({ length: rows }, () => Array(cols).fill(0));
+            for (const [cr, cc] of cells) shape[cr - minR][cc - minC] = 1;
+            result.push({ name: `조각${result.length + 1}`, shape, placed: false, origRow: minR, origCol: minC, origShape: shape.map(r => [...r]), uid: result.length });
+        }
+    }
+
+    if (diff.rotate) {
+        for (const p of result) {
+            const rot = Math.floor(Math.random() * 4);
+            for (let i = 0; i < rot; i++) p.shape = rotatePiece(p.shape);
+        }
+    }
+
+    return result;
+}
+
+// Backtracking solver
+function findSolution(pieceList, boardOverride) {
+    const board = boardOverride || Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    if (!boardOverride) {
+        for (let r = 0; r < ROWS; r++)
+            for (let c = 0; c < COLS; c++)
+                if (!isShape(r, c)) board[r][c] = -1;
+    }
+
+    const indices = pieceList.map((_, i) => i);
+    indices.sort((a, b) => {
+        const countCells = s => s.shape.flat().reduce((sum, v) => sum + v, 0);
+        return countCells(pieceList[b]) - countCells(pieceList[a]);
+    });
+    const sortedPieces = indices.map(i => pieceList[i]);
+    const pieceRotations = sortedPieces.map(p => [p.shape]);
+
+    function findEmpty() {
+        for (let r = 0; r < ROWS; r++)
+            for (let c = 0; c < COLS; c++)
+                if (board[r][c] === 0) return [r, c];
+        return null;
+    }
+
+    function canPlaceSolver(shape, sr, sc) {
+        for (let r = 0; r < shape.length; r++)
+            for (let c = 0; c < shape[0].length; c++) {
+                if (!shape[r][c]) continue;
+                const gr = sr + r, gc = sc + c;
+                if (gr < 0 || gr >= ROWS || gc < 0 || gc >= COLS) return false;
+                if (board[gr][gc] !== 0) return false;
+            }
+        return true;
+    }
+
+    function placeSolver(shape, sr, sc, val) {
+        for (let r = 0; r < shape.length; r++)
+            for (let c = 0; c < shape[0].length; c++) {
+                if (!shape[r][c]) continue;
+                board[sr + r][sc + c] = val;
+            }
+    }
+
+    const used = new Array(sortedPieces.length).fill(false);
+    const solution = [];
+    let nodesVisited = 0;
+    const NODE_LIMIT = sortedPieces.length <= 10 ? 500000 : 200000;
+
+    function solve() {
+        if (++nodesVisited > NODE_LIMIT) return false;
+        const empty = findEmpty();
+        if (!empty) return true;
+        const [er, ec] = empty;
+
+        for (let i = 0; i < sortedPieces.length; i++) {
+            if (used[i]) continue;
+            for (const rot of pieceRotations[i]) {
+                for (let r = 0; r < rot.length; r++) {
+                    for (let c = 0; c < rot[0].length; c++) {
+                        if (!rot[r][c]) continue;
+                        const sr = er - r, sc = ec - c;
+                        if (canPlaceSolver(rot, sr, sc)) {
+                            placeSolver(rot, sr, sc, i + 1);
+                            used[i] = true;
+                            solution.push({ pieceIdx: indices[i], rotation: rot, row: sr, col: sc });
+                            if (solve()) return true;
+                            solution.pop();
+                            placeSolver(rot, sr, sc, 0);
+                            used[i] = false;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    return solve() ? solution : null;
+}
+
+function isSolvable(pieceList) {
+    return findSolution(pieceList) !== null;
+}
+
+function generatePieces() {
+    const diff = DIFFICULTY[currentDifficulty];
+
+    if (!diff.rotate) {
+        pieces = generatePiecesRaw();
+        // Store the original solution: each piece's origRow/origCol is its correct position
+        storedSolution = pieces.map((p, i) => ({
+            pieceIdx: i,
+            uid: p.uid,
+            rotation: p.origShape,
+            row: p.origRow,
+            col: p.origCol
+        }));
+        shuffle(pieces);
+        // After shuffle, rebuild storedSolution index mapping
+        // storedSolution[i] still refers to the original piece by its origRow/origCol
+        // We need to map shuffled pieces back to their solutions
+        rebuildStoredSolution();
+        updatePieceCount();
+        renderPieces();
+        return;
+    }
+
+    msgEl.textContent = '퍼즐 생성 중...';
+    msgEl.style.color = '#f57c00';
+
+    setTimeout(() => {
+        const origRotate = diff.rotate;
+        diff.rotate = false;
+        pieces = generatePiecesRaw();
+        diff.rotate = origRotate;
+
+        // Store original solution before rotation
+        const origSolutions = pieces.map((p, i) => ({
+            origRow: p.origRow,
+            origCol: p.origCol,
+            origShape: p.origShape.map(r => [...r])
+        }));
+
+        const order = pieces.map((_, i) => i);
+        shuffle(order);
+
+        for (const i of order) {
+            const rot = 1 + Math.floor(Math.random() * 3);
+            const origShape = pieces[i].shape;
+            let newShape = origShape;
+            for (let r = 0; r < rot; r++) newShape = rotatePiece(newShape);
+
+            if (JSON.stringify(newShape) === JSON.stringify(origShape)) continue;
+
+            pieces[i].shape = newShape;
+
+            if (!isSolvable(pieces)) {
+                pieces[i].shape = origShape;
+            }
+        }
+
+        // For rotated pieces, run the solver once to get the actual solution
+        const sol = findSolution(pieces);
+        if (sol) {
+            storedSolution = sol.map(s => ({
+                pieceIdx: s.pieceIdx,
+                uid: pieces[s.pieceIdx].uid,
+                rotation: s.rotation.map(r => [...r]),
+                row: s.row,
+                col: s.col
+            }));
+        } else {
+            // Fallback: use original positions (before rotation)
+            storedSolution = pieces.map((p, i) => ({
+                pieceIdx: i,
+                uid: p.uid,
+                rotation: origSolutions[i].origShape,
+                row: origSolutions[i].origRow,
+                col: origSolutions[i].origCol
+            }));
+        }
+
+        shuffle(pieces);
+        rebuildStoredSolution();
+        updatePieceCount();
+        renderPieces();
+        msgEl.textContent = '';
+        msgEl.style.color = '#43a047';
+    }, 10);
+}
+
+// After shuffling pieces, remap storedSolution pieceIdx to match new order
+function rebuildStoredSolution() {
+    if (!storedSolution) return;
+    // Match storedSolution entries to shuffled pieces array using unique uid
+    for (const sol of storedSolution) {
+        const matchIdx = pieces.findIndex(p => p.uid === sol.uid);
+        if (matchIdx !== -1) {
+            sol.pieceIdx = matchIdx;
+        }
+    }
+}
+
+function updatePieceCount() {
+    const rem = pieces.filter(p => !p.placed).length;
+    document.getElementById('piece-count').textContent = `조각: ${rem} / ${pieces.length}개`;
+    updateHintBtn();
+}
+
+function renderPieces() {
+    piecesEl.innerHTML = '';
+    pieces.forEach((p, idx) => {
+        if (p.placed) return;
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('piece-wrapper');
+        wrapper.dataset.idx = idx;
+
+        const rows = p.shape.length, cols = p.shape[0].length;
+        const maxDim = Math.max(rows, cols);
+        const sz = maxDim > 8 ? 10 : maxDim > 5 ? 13 : 16;
+        const pg = document.createElement('div');
+        pg.classList.add('piece-grid');
+        pg.style.gridTemplateColumns = `repeat(${cols}, ${sz}px)`;
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const cell = document.createElement('div');
+                cell.classList.add('piece-cell');
+                cell.classList.add(p.shape[r][c] ? 'filled' : 'empty');
+                cell.style.width = sz + 'px'; cell.style.height = sz + 'px';
+                if (p.shape[r][c]) {
+                    cell.style.borderRadius = calcBorderRadius(p.shape, r, c, sz);
+                    applyPieceCellBorder(cell, p.shape, r, c);
+                }
+                pg.appendChild(cell);
+            }
+        }
+
+        const label = document.createElement('div');
+        label.classList.add('piece-label');
+        let cnt = 0; p.shape.forEach(row => row.forEach(v => { if(v) cnt++; }));
+        label.textContent = `${cnt} PTS`;
+
+        wrapper.appendChild(pg); wrapper.appendChild(label);
+        wrapper.addEventListener('mousedown', e => startDrag(e, idx));
+        wrapper.addEventListener('touchstart', e => startDrag(e, idx), { passive: false });
+        piecesEl.appendChild(wrapper);
+    });
+}
+
+// ===================== DRAG & DROP =====================
+function startDrag(e, idx) {
+    e.preventDefault();
+    draggingPiece = pieces[idx]; draggingIdx = idx;
+    const wrapper = e.currentTarget.closest('.piece-wrapper');
+    if (wrapper) wrapper.classList.add('dragging');
+
+    const shape = draggingPiece.shape, cols = shape[0].length;
+    const cs = getCellSize();
+    ghostEl.innerHTML = '';
+    const pg = document.createElement('div');
+    pg.classList.add('piece-grid');
+    pg.style.gridTemplateColumns = `repeat(${cols}, ${cs}px)`;
+    pg.style.gap = '0';
+    for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = document.createElement('div');
+            cell.classList.add('piece-cell');
+            cell.classList.add(shape[r][c] ? 'filled' : 'empty');
+            cell.style.width = cs + 'px'; cell.style.height = cs + 'px';
+            if (shape[r][c]) {
+                cell.style.borderRadius = calcBorderRadius(shape, r, c, cs);
+                applyPieceCellBorder(cell, shape, r, c);
+            }
+            pg.appendChild(cell);
+        }
+    }
+    ghostEl.appendChild(pg);
+    ghostEl.style.display = 'block';
+    moveGhost(e);
+
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend', onDragEnd);
+}
+
+function getDragOffset() { return ('ontouchstart' in window) ? 50 : 0; }
+
+function moveGhost(e) {
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const cs = getCellSize();
+    const off = getDragOffset();
+    ghostEl.style.left = (x - (draggingPiece.shape[0].length * cs) / 2) + 'px';
+    ghostEl.style.top = (y - (draggingPiece.shape.length * cs) / 2 - off) + 'px';
+}
+
+function onDragMove(e) {
+    if (!draggingPiece) return;
+    e.preventDefault(); moveGhost(e); highlightCells(e);
+}
+
+function getGridPos(e) {
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = gridEl.getBoundingClientRect();
+    const cs = getCellSize(), gap = 0;
+    const off = getDragOffset();
+    return {
+        row: Math.floor((y - rect.top - off) / (cs + gap)),
+        col: Math.floor((x - rect.left) / (cs + gap))
+    };
+}
+
+function canPlace(shape, sr, sc) {
+    for (let r = 0; r < shape.length; r++)
+        for (let c = 0; c < shape[0].length; c++) {
+            if (!shape[r][c]) continue;
+            const gr = sr + r, gc = sc + c;
+            if (gr < 0 || gr >= ROWS || gc < 0 || gc >= COLS) return false;
+            if (grid[gr][gc] !== 0) return false;
+        }
+    return true;
+}
+
+function highlightCells(e) {
+    clearHighlights();
+    if (!draggingPiece) return;
+    const pos = getGridPos(e), shape = draggingPiece.shape;
+    const sr = pos.row - Math.floor(shape.length / 2);
+    const sc = pos.col - Math.floor(shape[0].length / 2);
+    const valid = canPlace(shape, sr, sc);
+
+    for (let r = 0; r < shape.length; r++)
+        for (let c = 0; c < shape[0].length; c++) {
+            if (!shape[r][c]) continue;
+            const gr = sr + r, gc = sc + c;
+            if (gr < 0 || gr >= ROWS || gc < 0 || gc >= COLS) continue;
+            const cell = gridEl.querySelector(`.cell[data-row="${gr}"][data-col="${gc}"]`);
+            if (cell) cell.classList.add(valid ? 'highlight-valid' : 'highlight-invalid');
+        }
+}
+
+function clearHighlights() {
+    gridEl.querySelectorAll('.highlight-valid,.highlight-invalid').forEach(c => {
+        c.classList.remove('highlight-valid', 'highlight-invalid');
+    });
+}
+
+function onDragEnd(e) {
+    document.removeEventListener('mousemove', onDragMove);
+    document.removeEventListener('mouseup', onDragEnd);
+    document.removeEventListener('touchmove', onDragMove);
+    document.removeEventListener('touchend', onDragEnd);
+    clearHighlights(); ghostEl.style.display = 'none';
+    if (!draggingPiece) return;
+
+    const ce = e.changedTouches ? e.changedTouches[0] : e;
+    const pos = getGridPos({ clientX: ce.clientX, clientY: ce.clientY, touches: null });
+    const shape = draggingPiece.shape;
+    const sr = pos.row - Math.floor(shape.length / 2);
+    const sc = pos.col - Math.floor(shape[0].length / 2);
+
+    if (canPlace(shape, sr, sc)) {
+        placePiece(shape, sr, sc, draggingIdx);
+        pieces[draggingIdx].placed = true;
+        history.push(draggingIdx);
+        updateUndoBtn();
+        let cnt = 0; shape.forEach(row => row.forEach(v => { if(v) cnt++; }));
+        filledCount += cnt;
+
+        // Combo + IQ scoring
+        const combo = onPiecePlace();
+        const baseBonus = IQ_BONUS[currentDifficulty];
+        const comboMultiplier = combo >= 2 ? combo : 1;
+        iq += baseBonus * comboMultiplier;
+        iqEl.textContent = iq;
+
+        updatePieceCount(); renderPieces(); checkWin();
+    }
+
+    document.querySelectorAll('.piece-wrapper.dragging').forEach(el => el.classList.remove('dragging'));
+    draggingPiece = null; draggingIdx = -1;
+}
+
+function placePiece(shape, sr, sc, pieceIdx) {
+    pieces[pieceIdx].placedRow = sr;
+    pieces[pieceIdx].placedCol = sc;
+    for (let r = 0; r < shape.length; r++)
+        for (let c = 0; c < shape[0].length; c++) {
+            if (!shape[r][c]) continue;
+            const gr = sr + r, gc = sc + c;
+            grid[gr][gc] = 1;
+            cellOwner[`${gr},${gc}`] = pieceIdx;
+            const cell = gridEl.querySelector(`.cell[data-row="${gr}"][data-col="${gc}"]`);
+            if (cell) {
+                cell.classList.remove('shape-cell'); cell.classList.add('filled');
+                cell.style.background = 'linear-gradient(145deg, #5c6bc0, #3949ab)';
+                cell.style.border = '';
+                cell.style.borderRadius = '';
+                cell.style.transform = 'scale(1.2)';
+                setTimeout(() => cell.style.transform = '', 150);
+            }
+        }
+    updateFilledBorderRadius();
+}
+
+function updateFilledBorderRadius() {
+    const cs = getCellSize();
+    const rad = Math.round(cs * 0.42) + 'px';
+    // Bevel: top/left = light highlight, bottom/right = deep shadow
+    const hlW = 2.5, shW = 3;
+    const hlC = 'rgba(255,255,255,0.4)';
+    const shC = '#0d1557';
+    const iw = 0.5;
+    const ic = 'rgba(255,255,255,0.08)';
+
+    gridEl.querySelectorAll('.cell.filled').forEach(cell => {
+        const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+        const isFilled = (dr, dc) => {
+            const nr = r + dr, nc = c + dc;
+            const el = gridEl.querySelector(`.cell[data-row="${nr}"][data-col="${nc}"]`);
+            return el && el.classList.contains('filled');
+        };
+        const top = !isFilled(-1,0);
+        const bot = !isFilled(1,0);
+        const lft = !isFilled(0,-1);
+        const rgt = !isFilled(0,1);
+
+        // Beveled edges: light on top/left, shadow on bottom/right
+        cell.style.borderTop    = top ? `${hlW}px solid ${hlC}` : `${iw}px solid ${ic}`;
+        cell.style.borderLeft   = lft ? `${hlW}px solid ${hlC}` : `${iw}px solid ${ic}`;
+        cell.style.borderBottom = bot ? `${shW}px solid ${shC}` : `${iw}px solid ${ic}`;
+        cell.style.borderRight  = rgt ? `${shW}px solid ${shC}` : `${iw}px solid ${ic}`;
+
+        // Build composite box-shadow: inset bevel + optional drop shadow on outer edges
+        const shadows = [
+            'inset 2px 2px 5px rgba(255,255,255,0.25)',
+            'inset -2px -2px 5px rgba(0,0,0,0.3)'
+        ];
+        if (top || bot || lft || rgt) {
+            shadows.push('0 2px 6px rgba(0,0,0,0.25)');
+        }
+        cell.style.boxShadow = shadows.join(', ');
+
+        const tl = (top && lft) ? rad : '0';
+        const tr = (top && rgt) ? rad : '0';
+        const br = (bot && rgt) ? rad : '0';
+        const bl = (bot && lft) ? rad : '0';
+        cell.style.borderRadius = `${tl} ${tr} ${br} ${bl}`;
+    });
+}
+
+function removePieceFromGrid(pieceIdx, isPickup) {
+    const p = pieces[pieceIdx];
+    const shape = p.shape;
+    const sr = p.placedRow, sc = p.placedCol;
+    let cnt = 0;
+    for (let r = 0; r < shape.length; r++)
+        for (let c = 0; c < shape[0].length; c++) {
+            if (!shape[r][c]) continue;
+            const gr = sr + r, gc = sc + c;
+            grid[gr][gc] = 0;
+            delete cellOwner[`${gr},${gc}`];
+            cnt++;
+            const cell = gridEl.querySelector(`.cell[data-row="${gr}"][data-col="${gc}"]`);
+            if (cell) {
+                cell.classList.remove('filled'); cell.classList.add('shape-cell');
+                cell.style.background = '';
+                cell.style.border = '';
+                cell.style.borderRadius = '';
+                cell.style.boxShadow = '';
+            }
+        }
+    // Re-apply shape outline styling on restored cells
+    const cs = getCellSize();
+    for (let r = 0; r < shape.length; r++)
+        for (let c = 0; c < shape[0].length; c++) {
+            if (!shape[r][c]) continue;
+            const gr = sr + r, gc = sc + c;
+            const cell = gridEl.querySelector(`.cell[data-row="${gr}"][data-col="${gc}"]`);
+            if (cell) applyShapeCellStyle(cell, gr, gc, cs);
+        }
+    p.placed = false;
+    p.placedRow = undefined;
+    p.placedCol = undefined;
+    filledCount -= cnt;
+
+    // Apply pickup penalty
+    if (isPickup) {
+        iq = Math.max(IQ_BASE, iq - PICKUP_PENALTY);
+    }
+    iqEl.textContent = iq;
+    updatePieceCount();
+    renderPieces();
+    updateFilledBorderRadius();
+}
+
+function checkWin() {
+    if (filledCount >= totalShapeCells) {
+        msgEl.textContent = '';
+        celebrateWin();
+    } else {
+        const rem = pieces.filter(p => !p.placed);
+        if (rem.length === 0 && filledCount < totalShapeCells)
+            msgEl.textContent = '조각이 부족합니다. 새 퍼즐을 시작하세요!';
+    }
+}
+
+function celebrateWin() {
+    // Stop combo timer
+    if (comboTimerId) { clearInterval(comboTimerId); comboTimerId = null; }
+
+    // Add current IQ to total
+    totalIQ += iq;
+
+    // 1) Shimmer all filled cells in wave
+    const filledCells = gridEl.querySelectorAll('.cell.filled');
+    filledCells.forEach((cell, i) => {
+        cell.style.setProperty('--sd', (i * 30) + 'ms');
+        cell.classList.add('win-shimmer');
+    });
+
+    // 2) Confetti rain
+    spawnConfetti();
+    setTimeout(spawnConfetti, 800);
+    setTimeout(spawnConfetti, 1600);
+
+    // 3) Fireworks
+    setTimeout(() => spawnFireworks(window.innerWidth * 0.3, window.innerHeight * 0.3), 300);
+    setTimeout(() => spawnFireworks(window.innerWidth * 0.7, window.innerHeight * 0.25), 700);
+    setTimeout(() => spawnFireworks(window.innerWidth * 0.5, window.innerHeight * 0.4), 1100);
+
+    // 4) Show overlay after short delay
+    const stars = calcStars();
+    setTimeout(() => {
+        const overlay = document.getElementById('win-overlay');
+        document.getElementById('win-icon').textContent = CURRENT_SHAPE.icon;
+        document.getElementById('win-level').textContent = `Lv.${currentLevel} - ${getDifficultyLabel(currentDifficulty)}`;
+        document.getElementById('win-sub').textContent = `${CURRENT_SHAPE.name} 완성!`;
+        document.getElementById('win-stars').textContent = starsToText(stars);
+        document.getElementById('win-iq').textContent = `IQ ${iq}`;
+        document.getElementById('win-combo-max').textContent =
+            comboMaxThisLevel >= 2 ? `최대 콤보: x${comboMaxThisLevel}` : '';
+        document.getElementById('total-iq').textContent = `총 IQ: ${totalIQ}`;
+        overlay.classList.add('show');
+    }, 1200);
+}
+
+function getDifficultyLabel(diff) {
+    return { easy: '쉬움', normal: '보통', hard: '어려움' }[diff] || diff;
+}
+
+function spawnConfetti() {
+    const colors = ['#f44336','#e91e63','#9c27b0','#3f51b5','#03a9f4','#4caf50','#ffeb3b','#ff9800','#ff5722','#8bc34a'];
+    const shapes = ['square','circle','ribbon'];
+    for (let i = 0; i < 50; i++) {
+        const el = document.createElement('div');
+        el.classList.add('confetti');
+        const shape = shapes[Math.floor(Math.random()*shapes.length)];
+        const size = 6 + Math.random() * 10;
+        el.style.left = Math.random()*100+'vw';
+        el.style.top = '-20px';
+        el.style.width = (shape === 'ribbon' ? size*0.4 : size) + 'px';
+        el.style.height = (shape === 'ribbon' ? size*2.5 : size) + 'px';
+        el.style.borderRadius = shape === 'circle' ? '50%' : shape === 'ribbon' ? '2px' : '0';
+        el.style.background = colors[Math.floor(Math.random()*colors.length)];
+        el.style.setProperty('--dur', (2 + Math.random()*2) + 's');
+        el.style.setProperty('--delay', (Math.random()*1) + 's');
+        el.style.setProperty('--rot', (360 + Math.random()*720) + 'deg');
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 5000);
+    }
+}
+
+function spawnFireworks(cx, cy) {
+    const colors = ['#ff0','#f44','#4cf','#f4f','#4f4','#fa0','#fff'];
+    for (let i = 0; i < 30; i++) {
+        const el = document.createElement('div');
+        el.classList.add('firework');
+        const angle = (Math.PI * 2 * i) / 30 + (Math.random() - 0.5) * 0.3;
+        const dist = 60 + Math.random() * 100;
+        el.style.left = cx + 'px'; el.style.top = cy + 'px';
+        el.style.background = colors[Math.floor(Math.random()*colors.length)];
+        el.style.boxShadow = `0 0 6px ${el.style.background}`;
+        el.style.setProperty('--bx', Math.cos(angle)*dist + 'px');
+        el.style.setProperty('--by', Math.sin(angle)*dist + 'px');
+        el.style.setProperty('--bdur', (0.5 + Math.random()*0.5) + 's');
+        el.style.setProperty('--bdelay', (Math.random()*0.2) + 's');
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+    }
+}
+
+// ===================== HINT =====================
+function giveHint() {
+    const unplaced = pieces.map((p, i) => ({ piece: p, idx: i })).filter(x => !x.piece.placed);
+    if (unplaced.length === 0) return;
+
+    let hintPieceIdx = -1;
+    let hintRotation = null;
+    let hintRow = -1, hintCol = -1;
+
+    // Strategy 1: Use stored solution - check if any unplaced piece can go to its original position
+    if (storedSolution) {
+        for (const sol of storedSolution) {
+            const p = pieces[sol.pieceIdx];
+            if (p.placed) continue;
+            // Check if the original position is still available
+            if (canPlace(sol.rotation, sol.row, sol.col)) {
+                hintPieceIdx = sol.pieceIdx;
+                hintRotation = sol.rotation;
+                hintRow = sol.row;
+                hintCol = sol.col;
+                break;
+            }
+        }
+    }
+
+    // Strategy 2: If stored solution doesn't work (user placed pieces in wrong spots),
+    // try the backtracking solver with current board state
+    if (hintPieceIdx === -1) {
+        const board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+        for (let r = 0; r < ROWS; r++)
+            for (let c = 0; c < COLS; c++) {
+                if (!isShape(r, c)) board[r][c] = -1;
+                else if (grid[r][c] === 1) board[r][c] = -2;
+            }
+
+        const unplacedPieces = unplaced.map(x => x.piece);
+        const solution = findSolution(unplacedPieces, board);
+        if (solution && solution.length > 0) {
+            // Pick the largest piece from the solution
+            const hint = solution.reduce((best, cur) => {
+                const bestCells = best.rotation.flat().reduce((s, v) => s + v, 0);
+                const curCells = cur.rotation.flat().reduce((s, v) => s + v, 0);
+                return curCells > bestCells ? cur : best;
+            });
+            hintPieceIdx = unplaced[hint.pieceIdx].idx;
+            hintRotation = hint.rotation;
+            hintRow = hint.row;
+            hintCol = hint.col;
+        }
+    }
+
+    // Strategy 3: If solver also fails, try brute-force placing each unplaced piece
+    // at every valid position (just find ANY valid placement, not full solution)
+    if (hintPieceIdx === -1) {
+        for (const { piece, idx } of unplaced) {
+            const shape = piece.shape;
+            for (let r = -(shape.length); r < ROWS; r++) {
+                for (let c = -(shape[0].length); c < COLS; c++) {
+                    if (canPlace(shape, r, c)) {
+                        hintPieceIdx = idx;
+                        hintRotation = shape;
+                        hintRow = r;
+                        hintCol = c;
+                        break;
+                    }
+                }
+                if (hintPieceIdx !== -1) break;
+            }
+            if (hintPieceIdx !== -1) break;
+        }
+    }
+
+    if (hintPieceIdx === -1) {
+        msgEl.textContent = '배치할 수 없습니다. 되돌리기를 사용해보세요!';
+        msgEl.style.color = '#e53935';
+        setTimeout(() => { msgEl.textContent = ''; msgEl.style.color = '#43a047'; }, 3000);
+        return;
+    }
+
+    // Deduct IQ + track usage
+    iq = Math.max(IQ_BASE, iq - HINT_PENALTY);
+    iqEl.textContent = iq;
+    hintUsedCount++;
+
+    const hintCells = [];
+    for (let r = 0; r < hintRotation.length; r++)
+        for (let c = 0; c < hintRotation[0].length; c++) {
+            if (!hintRotation[r][c]) continue;
+            const gr = hintRow + r, gc = hintCol + c;
+            const cell = gridEl.querySelector(`.cell[data-row="${gr}"][data-col="${gc}"]`);
+            if (cell) {
+                cell.classList.add('hint-highlight');
+                hintCells.push(cell);
+            }
+        }
+
+    const pieceWrapper = piecesEl.querySelector(`.piece-wrapper[data-idx="${hintPieceIdx}"]`);
+    if (pieceWrapper) pieceWrapper.classList.add('hint-piece');
+
+    setTimeout(() => {
+        hintCells.forEach(c => c.classList.remove('hint-highlight'));
+        if (pieceWrapper) pieceWrapper.classList.remove('hint-piece');
+    }, 2500);
+}
+
+function updateHintBtn() {
+    const btn = document.getElementById('hint-btn');
+    const unplaced = pieces.filter(p => !p.placed);
+    btn.disabled = unplaced.length === 0;
+}
+
+// ===================== CONTROLS =====================
+function updateUndoBtn() {
+    const btn = document.getElementById('undo-btn');
+    btn.disabled = history.length === 0;
+}
+
+function undoLast() {
+    if (history.length === 0) return;
+    const pidx = history.pop();
+    removePieceFromGrid(pidx, false);
+    // Apply undo penalty
+    iq = Math.max(IQ_BASE, iq - UNDO_PENALTY);
+    iqEl.textContent = iq;
+    undoUsedCount++;
+    updateUndoBtn();
+}
+
+function resetGame() {
+    iq = IQ_BASE; iqEl.textContent = iq; msgEl.textContent = '';
+    hintUsedCount = 0; undoUsedCount = 0;
+    resetCombo(); comboMaxThisLevel = 0;
+    initGrid(); pieces.forEach(p => p.placed = false);
+    updatePieceCount(); renderPieces();
+    updateLevelUI();
+}
+
+function newGame() {
+    iq = IQ_BASE; iqEl.textContent = iq; msgEl.textContent = '';
+    hintUsedCount = 0; undoUsedCount = 0;
+    resetCombo(); comboMaxThisLevel = 0;
+    initGrid(); generatePieces();
+    updateShapeSelector();
+    updateLevelUI();
+}
+
+function updateShapeSelector() {
+    document.querySelectorAll('.shape-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.shapeKey === currentShapeKey);
+    });
+    updateShapeToggle();
+}
+
+function nextLevel() {
+    currentLevel++;
+    currentDifficulty = getDifficultyForLevel(currentLevel);
+    currentShapeKey = getShapeForLevel(currentLevel);
+    loadShape();
+    newGame();
+    updateShapeToggle();
+}
+
+document.getElementById('hint-btn').addEventListener('click', giveHint);
+document.getElementById('undo-btn').addEventListener('click', undoLast);
+document.getElementById('reset-btn').addEventListener('click', resetGame);
+document.getElementById('new-btn').addEventListener('click', newGame);
+document.getElementById('win-next').addEventListener('click', () => {
+    document.getElementById('win-overlay').classList.remove('show');
+    nextLevel();
+});
+document.getElementById('win-retry').addEventListener('click', () => {
+    document.getElementById('win-overlay').classList.remove('show');
+    // Replay same level: deduct the IQ we added for the win
+    totalIQ -= iq;
+    document.getElementById('total-iq').textContent = `총 IQ: ${totalIQ}`;
+    newGame();
+});
+
+document.querySelectorAll('.diff-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const newDiff = btn.dataset.diff;
+        if (newDiff !== currentDifficulty) {
+            if (!confirm(`난이도를 변경하면 레벨이 초기화됩니다. 계속하시겠습니까?`)) return;
+            currentLevel = { easy: 1, normal: 6, hard: 13 }[newDiff];
+            totalIQ = 0;
+            usedShapes = { easy: [], normal: [], hard: [] };
+        }
+        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentDifficulty = newDiff;
+        newGame();
+    });
+});
+
+window.addEventListener('resize', () => {
+    const cs = getCellSize();
+    gridEl.style.gridTemplateColumns = `repeat(${COLS}, ${cs}px)`;
+    gridEl.querySelectorAll('.cell').forEach(c => { c.style.width = cs+'px'; c.style.height = cs+'px'; });
+    gridEl.querySelectorAll('.cell.shape-cell').forEach(c => {
+        const r = parseInt(c.dataset.row), col = parseInt(c.dataset.col);
+        applyShapeCellStyle(c, r, col, cs);
+    });
+    updateFilledBorderRadius();
+    renderPieces();
+});
+
+// ===================== INIT =====================
+buildShapeSelector();
+currentDifficulty = getDifficultyForLevel(currentLevel);
+currentShapeKey = getShapeForLevel(currentLevel);
+loadShape();
+newGame();
+</script>
+</body>
+</html>
