@@ -6,17 +6,16 @@
     <title>블록 퍼즐</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html { height: 100%; }
+        html { height: 100dvh; overflow: hidden; }
         body {
             font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #e8f0fe, #d0e0ff);
-            min-height: 100dvh;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
             align-items: center;
             user-select: none;
-            overflow-x: hidden;
-            overflow-y: auto;
+            overflow: hidden;
             overscroll-behavior: none;
         }
         h1 { margin-top: 15px; font-size: 26px; color: #1a237e; }
@@ -113,18 +112,13 @@
         .cell { width: 30px; height: 30px; border-radius: 0; transition: background 0.15s; position: relative; }
         .cell.empty { background: transparent; }
         .cell.shape-cell {
-            background: linear-gradient(145deg, #eef2fb, #dce3f3);
-            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.08),
-                        inset -1px -1px 2px rgba(255,255,255,0.7);
+            background: #dce3f3;
         }
         .cell.shape-cell.highlight-valid { background: #a5d6a7; }
         .cell.shape-cell.highlight-invalid { background: #ef9a9a; }
         .cell.filled {
-            background: linear-gradient(145deg, #5c6bc0, #3949ab);
+            background: #3f51b5;
             cursor: grab;
-            box-shadow: inset 2px 2px 4px rgba(255,255,255,0.25),
-                        inset -2px -2px 4px rgba(0,0,0,0.3),
-                        0 1px 3px rgba(0,0,0,0.2);
         }
 
         #pieces-area {
@@ -141,10 +135,7 @@
         .piece-grid { display: grid; gap: 0; }
         .piece-cell { border-radius: 0; }
         .piece-cell.filled {
-            background: linear-gradient(145deg, #5c6bc0, #3949ab);
-            box-shadow: inset 1.5px 1.5px 3px rgba(255,255,255,0.3),
-                        inset -1.5px -1.5px 3px rgba(0,0,0,0.35),
-                        0 1px 2px rgba(0,0,0,0.15);
+            background: #3f51b5;
         }
         .piece-cell.empty { background: transparent; }
         .piece-label { margin-top: 4px; font-size: 11px; font-weight: bold; color: #3f51b5; }
@@ -1560,13 +1551,16 @@ function getCellSize() {
     // Measure actual heights of all non-grid body elements
     let usedH = 0;
     document.querySelectorAll('body > *').forEach(el => {
-        if (['game-area','drag-ghost','combo-popup','win-overlay'].includes(el.id)) return;
+        // position:fixed 요소 및 오버레이, 파티클 등은 레이아웃 높이에서 제외
+        if (['game-area','drag-ghost','combo-popup','win-overlay',
+             'shape-picker-btn','shape-popup'].includes(el.id)) return;
+        if (el.classList.contains('confetti') || el.classList.contains('firework')) return;
         const h = el.getBoundingClientRect().height;
-        // pieces-area may be empty on first call — use single-row height as fallback
-        usedH += (el.id === 'pieces-area' && h < 4) ? Math.floor(vh * 0.10) : h;
+        // pieces-area may be empty on first call — estimate 2줄 높이로 폴백
+        usedH += (el.id === 'pieces-area' && h < 4) ? Math.floor(vh * 0.22) : h;
     });
-    // 20px buffer for inter-element margins
-    const availH = Math.max(0, vh - usedH - 20);
+    // 30px buffer for inter-element margins (스크롤 없이 딱 맞추기 위해 여유 확보)
+    const availH = Math.max(0, vh - usedH - 30);
     const csFromHeight = ROWS > 0 ? Math.floor(availH / ROWS) : 30;
     return Math.max(14, Math.min(csFromWidth, csFromHeight, 30));
 }
@@ -1831,6 +1825,7 @@ function generatePieces() {
         rebuildStoredSolution();
         updatePieceCount();
         renderPieces();
+        requestAnimationFrame(() => requestAnimationFrame(updateGridSize));
         msgEl.textContent = '';
         msgEl.style.color = '#43a047';
     }, 10);
@@ -2066,12 +2061,8 @@ function placePiece(shape, sr, sc, pieceIdx) {
 function updateFilledBorderRadius() {
     const cs = getCellSize();
     const rad = Math.round(cs * 0.42) + 'px';
-    // Bevel: top/left = light highlight, bottom/right = deep shadow
-    const hlW = 2.5, shW = 3;
-    const hlC = 'rgba(255,255,255,0.4)';
-    const shC = '#0d1557';
     const iw = 0.5;
-    const ic = 'rgba(255,255,255,0.08)';
+    const ic = 'rgba(0,0,0,0.08)';
 
     gridEl.querySelectorAll('.cell.filled').forEach(cell => {
         const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
@@ -2085,21 +2076,8 @@ function updateFilledBorderRadius() {
         const lft = !isFilled(0,-1);
         const rgt = !isFilled(0,1);
 
-        // Beveled edges: light on top/left, shadow on bottom/right
-        cell.style.borderTop    = top ? `${hlW}px solid ${hlC}` : `${iw}px solid ${ic}`;
-        cell.style.borderLeft   = lft ? `${hlW}px solid ${hlC}` : `${iw}px solid ${ic}`;
-        cell.style.borderBottom = bot ? `${shW}px solid ${shC}` : `${iw}px solid ${ic}`;
-        cell.style.borderRight  = rgt ? `${shW}px solid ${shC}` : `${iw}px solid ${ic}`;
-
-        // Build composite box-shadow: inset bevel + optional drop shadow on outer edges
-        const shadows = [
-            'inset 2px 2px 5px rgba(255,255,255,0.25)',
-            'inset -2px -2px 5px rgba(0,0,0,0.3)'
-        ];
-        if (top || bot || lft || rgt) {
-            shadows.push('0 2px 6px rgba(0,0,0,0.25)');
-        }
-        cell.style.boxShadow = shadows.join(', ');
+        cell.style.border = `${iw}px solid ${ic}`;
+        cell.style.boxShadow = '';
 
         const tl = (top && lft) ? rad : '0';
         const tr = (top && rgt) ? rad : '0';
@@ -2394,7 +2372,7 @@ function newGame() {
     iq = IQ_BASE; iqEl.textContent = iq; msgEl.textContent = '';
     hintUsedCount = 0; undoUsedCount = 0;
     resetCombo(); comboMaxThisLevel = 0;
-    initGrid(); generatePieces();
+    generatePieces(); initGrid();
     updateShapeSelector();
     updateLevelUI();
 }
@@ -2459,6 +2437,8 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
 
 function updateGridSize() {
     if (!ROWS || !gridEl) return;
+    // 모든 조각이 배치된 클리어 상태에서는 그리드 크기 변경 금지 (win 시 축소 방지)
+    if (pieces && pieces.length > 0 && pieces.every(p => p.placed)) return;
     const cs = getCellSize();
     gridEl.style.gridTemplateColumns = `repeat(${COLS}, ${cs}px)`;
     gridEl.querySelectorAll('.cell').forEach(c => { c.style.width = cs+'px'; c.style.height = cs+'px'; });
