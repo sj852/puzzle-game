@@ -280,7 +280,17 @@
             #game-area { margin: 4px auto; }
             #grid-container { padding: 1px; }
             #piece-count { font-size: 12px; margin-bottom: 2px; }
-            #pieces-area { gap: 6px; margin: 2px auto; padding: 4px; max-height: 18vh; overflow-y: auto; }
+            #pieces-area {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                overflow-y: hidden;
+                max-height: none;
+                width: 100%;
+                gap: 8px;
+                margin: 2px 0;
+                padding: 4px 8px;
+                justify-content: flex-start;
+            }
             .piece-wrapper { padding: 4px; border-radius: 8px; }
             .piece-wrapper:hover { transform: none; }
             .piece-label { font-size: 9px; margin-top: 2px; }
@@ -1509,8 +1519,8 @@ function getCellSize() {
     document.querySelectorAll('body > *').forEach(el => {
         if (['game-area','drag-ghost','combo-popup','win-overlay'].includes(el.id)) return;
         const h = el.getBoundingClientRect().height;
-        // pieces-area may be empty on first call — use max-height estimate as fallback
-        usedH += (el.id === 'pieces-area' && h < 4) ? Math.floor(vh * 0.18) : h;
+        // pieces-area may be empty on first call — use single-row height as fallback
+        usedH += (el.id === 'pieces-area' && h < 4) ? Math.floor(vh * 0.10) : h;
     });
     // 20px buffer for inter-element margins
     const availH = Math.max(0, vh - usedH - 20);
@@ -1811,7 +1821,10 @@ function renderPieces() {
 
         const rows = p.shape.length, cols = p.shape[0].length;
         const maxDim = Math.max(rows, cols);
-        const sz = maxDim > 8 ? 10 : maxDim > 5 ? 13 : 16;
+        const isMobile = window.innerWidth <= 480;
+        const sz = isMobile
+            ? (maxDim > 8 ? 7 : maxDim > 5 ? 9 : 11)
+            : (maxDim > 8 ? 10 : maxDim > 5 ? 13 : 16);
         const pg = document.createElement('div');
         pg.classList.add('piece-grid');
         pg.style.gridTemplateColumns = `repeat(${cols}, ${sz}px)`;
