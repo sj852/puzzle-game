@@ -281,15 +281,14 @@
             #grid-container { padding: 1px; }
             #piece-count { font-size: 12px; margin-bottom: 2px; }
             #pieces-area {
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                overflow-y: hidden;
+                flex-wrap: wrap;
+                overflow: visible;
                 max-height: none;
                 width: 100%;
-                gap: 8px;
+                gap: 6px;
                 margin: 2px 0;
-                padding: 4px 8px;
-                justify-content: flex-start;
+                padding: 4px 6px;
+                justify-content: center;
             }
             .piece-wrapper { padding: 4px; border-radius: 8px; }
             .piece-wrapper:hover { transform: none; }
@@ -1823,7 +1822,7 @@ function renderPieces() {
         const maxDim = Math.max(rows, cols);
         const isMobile = window.innerWidth <= 480;
         const sz = isMobile
-            ? (maxDim > 8 ? 7 : maxDim > 5 ? 9 : 11)
+            ? (maxDim > 8 ? 10 : maxDim > 5 ? 12 : 14)
             : (maxDim > 8 ? 10 : maxDim > 5 ? 13 : 16);
         const pg = document.createElement('div');
         pg.classList.add('piece-grid');
@@ -1853,6 +1852,8 @@ function renderPieces() {
         wrapper.addEventListener('touchstart', e => startDrag(e, idx), { passive: false });
         piecesEl.appendChild(wrapper);
     });
+    // 조각 렌더 후 실제 높이 기반으로 그리드 크기 재계산
+    requestAnimationFrame(updateGridSize);
 }
 
 // ===================== DRAG & DROP =====================
@@ -2408,7 +2409,8 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
     });
 });
 
-function onViewportResize() {
+function updateGridSize() {
+    if (!ROWS || !gridEl) return;
     const cs = getCellSize();
     gridEl.style.gridTemplateColumns = `repeat(${COLS}, ${cs}px)`;
     gridEl.querySelectorAll('.cell').forEach(c => { c.style.width = cs+'px'; c.style.height = cs+'px'; });
@@ -2417,7 +2419,11 @@ function onViewportResize() {
         applyShapeCellStyle(c, r, col, cs);
     });
     updateFilledBorderRadius();
-    renderPieces();
+}
+
+function onViewportResize() {
+    updateGridSize();
+    renderPieces(); // 내부에서 RAF로 updateGridSize 재호출하여 정확히 맞춤
 }
 window.addEventListener('resize', onViewportResize);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
