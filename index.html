@@ -223,14 +223,106 @@
         /* Firework burst */
         .firework {
             position: fixed; pointer-events: none; z-index: 9999;
-            width: 6px; height: 6px; border-radius: 50%;
+            border-radius: 50%;
             animation: burst var(--bdur) ease-out forwards;
             animation-delay: var(--bdelay);
             opacity: 0;
         }
         @keyframes burst {
-            0% { opacity: 1; transform: translate(0,0) scale(1); }
+            0%   { opacity: 1; transform: translate(0,0) scale(1); }
+            70%  { opacity: 0.6; }
             100% { opacity: 0; transform: translate(var(--bx), var(--by)) scale(0); }
+        }
+
+        /* Screen flash */
+        .win-flash {
+            position: fixed; inset: 0; z-index: 9997; pointer-events: none;
+            background: white;
+            animation: winFlashAnim 0.6s ease-out forwards;
+        }
+        @keyframes winFlashAnim {
+            0%   { opacity: 0.9; }
+            100% { opacity: 0; }
+        }
+
+        /* Rainbow shimmer on grid cells */
+        .cell.rainbow-wave {
+            animation: rainbowCycle 1.4s ease-out forwards !important;
+            animation-delay: var(--sd) !important;
+        }
+        @keyframes rainbowCycle {
+            0%   { background: #fff176; transform: scale(1.35); filter: brightness(2); }
+            15%  { background: #ff6f00; }
+            30%  { background: #e91e63; }
+            45%  { background: #9c27b0; }
+            60%  { background: #03a9f4; }
+            75%  { background: #4caf50; transform: scale(1.1); filter: brightness(1.4); }
+            100% { background: #3f51b5; transform: scale(1); filter: brightness(1); }
+        }
+
+        /* Shockwave ring */
+        .shockwave {
+            position: fixed; pointer-events: none; z-index: 9996;
+            border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            animation: shockwaveAnim var(--dur) ease-out forwards;
+            animation-delay: var(--delay);
+            opacity: 0;
+        }
+        @keyframes shockwaveAnim {
+            0%   { opacity: 1; transform: translate(-50%, -50%) scale(0); }
+            60%  { opacity: 0.6; }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(var(--scale)); }
+        }
+
+        /* Sparkle star */
+        .sparkle {
+            position: fixed; pointer-events: none; z-index: 9999;
+            clip-path: polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);
+            animation: sparkleAnim var(--dur) ease-out forwards;
+            animation-delay: var(--delay);
+            opacity: 0;
+        }
+        @keyframes sparkleAnim {
+            0%   { opacity: 1; transform: translate(0,0) scale(1) rotate(0deg); }
+            100% { opacity: 0; transform: translate(var(--tx),var(--ty)) scale(0) rotate(var(--rot)); }
+        }
+
+        /* Shooting star */
+        .shooting-star {
+            position: fixed; pointer-events: none; z-index: 9996;
+            height: 2px; border-radius: 1px; opacity: 0;
+            animation: shootingStarAnim var(--dur) ease-in forwards;
+            animation-delay: var(--delay);
+        }
+        @keyframes shootingStarAnim {
+            0%   { opacity: 0.9; transform: translateX(0); }
+            100% { opacity: 0; transform: translateX(var(--tx)); }
+        }
+
+        /* Floating text particles */
+        .float-text {
+            position: fixed; pointer-events: none; z-index: 9998;
+            font-weight: 900; font-family: 'Segoe UI', sans-serif;
+            text-shadow: 0 0 12px currentColor, 0 2px 6px rgba(0,0,0,0.4);
+            animation: floatTextAnim var(--dur) ease-out forwards;
+            animation-delay: var(--delay);
+            opacity: 0;
+        }
+        @keyframes floatTextAnim {
+            0%   { opacity: 1; transform: translateY(0) scale(0.4) rotate(var(--r0)); }
+            25%  { opacity: 1; transform: translateY(-30px) scale(1.2) rotate(var(--r1)); }
+            100% { opacity: 0; transform: translateY(-120px) scale(0.9) rotate(var(--r2)); }
+        }
+
+        /* Grid win explode */
+        #grid-container.grid-win-explode {
+            animation: gridExplodeAnim 0.6s ease-out forwards;
+        }
+        @keyframes gridExplodeAnim {
+            0%   { transform: scale(1); filter: brightness(1); }
+            35%  { transform: scale(1.07); filter: brightness(1.8) saturate(1.8); }
+            100% { transform: scale(1); filter: brightness(1) saturate(1); }
         }
         #hint-btn { background: #ffc107; color: #333; }
         #hint-btn:disabled { background: #ccc; cursor: default; }
@@ -1318,38 +1410,113 @@ function sfxUndo() {
 function sfxWin() {
     if (audioMuted) return;
     const ctx = getAudioCtx();
-    // Fanfare: C5-E5-G5-C6-E5-C6-E6
-    const melody = [
-        { freq: 523.25, t: 0.00, dur: 0.12 },
-        { freq: 659.25, t: 0.12, dur: 0.12 },
-        { freq: 783.99, t: 0.24, dur: 0.12 },
-        { freq: 1046.5, t: 0.36, dur: 0.18 },
-        { freq: 659.25, t: 0.54, dur: 0.12 },
-        { freq: 1046.5, t: 0.66, dur: 0.12 },
-        { freq: 1318.5, t: 0.78, dur: 0.30 },
-    ];
-    melody.forEach(({ freq, t, dur }) => {
+    const now = ctx.currentTime;
+
+    // Compressor — 전체 음량 클리핑 방지
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -10; comp.knee.value = 8;
+    comp.ratio.value = 6; comp.attack.value = 0.002; comp.release.value = 0.15;
+    comp.connect(ctx.destination);
+
+    // Helper: 단일 음표 (attack + release 엔벨로프)
+    function note(freq, start, dur, vol, type = 'sine', det = 0) {
         const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + t);
-        gain.gain.setValueAtTime(0.18, ctx.currentTime + t);
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + t + dur);
-        osc.start(ctx.currentTime + t);
-        osc.stop(ctx.currentTime + t + dur);
+        const g = ctx.createGain();
+        osc.connect(g); g.connect(comp);
+        osc.type = type; osc.frequency.value = freq;
+        if (det) osc.detune.value = det;
+        g.gain.setValueAtTime(0, now + start);
+        g.gain.linearRampToValueAtTime(vol, now + start + 0.012);
+        g.gain.setValueAtTime(vol, now + start + dur * 0.6);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+        osc.start(now + start); osc.stop(now + start + dur + 0.05);
+    }
+
+    // Helper: 주파수 스윕
+    function sweep(f1, f2, start, dur, vol, type = 'sine') {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.connect(g); g.connect(comp); osc.type = type;
+        osc.frequency.setValueAtTime(f1, now + start);
+        osc.frequency.exponentialRampToValueAtTime(f2, now + start + dur);
+        g.gain.setValueAtTime(vol, now + start);
+        g.gain.linearRampToValueAtTime(0, now + start + dur);
+        osc.start(now + start); osc.stop(now + start + dur + 0.05);
+    }
+
+    // Helper: 노이즈 버스트 (스네어/심벌 느낌)
+    function noiseBurst(start, dur, vol, fFreq = 800, Q = 1.5) {
+        const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * (dur + 0.05)), ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const src = ctx.createBufferSource(); src.buffer = buf;
+        const flt = ctx.createBiquadFilter();
+        flt.type = 'bandpass'; flt.frequency.value = fFreq; flt.Q.value = Q;
+        const g = ctx.createGain();
+        src.connect(flt); flt.connect(g); g.connect(comp);
+        g.gain.setValueAtTime(vol, now + start);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+        src.start(now + start); src.stop(now + start + dur + 0.05);
+    }
+
+    // ── 1) 오프닝 임팩트 t=0 ─────────────────────────────
+    sweep(90, 32, 0, 0.50, 0.55);          // 베이스 폭탄
+    sweep(60, 25, 0.03, 0.45, 0.30);       // 서브 베이스
+    noiseBurst(0, 0.06, 0.45, 1600, 0.8);  // 노이즈 스냅
+    noiseBurst(0, 0.18, 0.20, 380, 1.2);   // 로우 붐
+    [261.63, 329.63, 392.00, 523.25].forEach(f => note(f, 0, 0.22, 0.11, 'triangle')); // 코드 스탭
+
+    // ── 2) 상승 스윕 t=0→0.45 ────────────────────────────
+    sweep(160, 1500, 0, 0.45, 0.13);
+    sweep(220, 800,  0.06, 0.38, 0.08);
+
+    // ── 3) 드럼롤 크레셴도 t=0.08→0.43 ──────────────────
+    for (let i = 0; i < 9; i++) {
+        noiseBurst(0.08 + i * 0.038, 0.032, 0.07 + i * 0.025, 550 + i * 45, 1.8);
+    }
+
+    // ── 4) 메인 팡파레 멜로디 t=0.45 ─────────────────────
+    // C5-E5-G5-C6-D6-E6-G6 → C7 롱홀드
+    const mel = [
+        [523.25, 0.45, 0.15],
+        [659.25, 0.60, 0.15],
+        [783.99, 0.75, 0.15],
+        [1046.5, 0.90, 0.20],
+        [1174.7, 1.10, 0.13],
+        [1318.5, 1.23, 0.13],
+        [1567.9, 1.36, 0.14],
+        [2093.0, 1.50, 0.80],  // C7 — 피날레
+    ];
+    mel.forEach(([f, s, d]) => {
+        note(f, s, d, 0.22, 'triangle');        // 메인 (따뜻한 음색)
+        note(f, s, d, 0.09, 'sine',  10);       // 코러스 +10 cents
+        note(f, s, d, 0.09, 'sine', -10);       // 코러스 -10 cents
+        note(f, s + 0.04, d * 0.7, 0.05, 'sine'); // 에코
     });
-    // Low bass thump
-    const bass = ctx.createOscillator();
-    const bassGain = ctx.createGain();
-    bass.connect(bassGain); bassGain.connect(ctx.destination);
-    bass.type = 'sine';
-    bass.frequency.setValueAtTime(80, ctx.currentTime);
-    bass.frequency.linearRampToValueAtTime(50, ctx.currentTime + 0.3);
-    bassGain.gain.setValueAtTime(0.3, ctx.currentTime);
-    bassGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
-    bass.start(ctx.currentTime);
-    bass.stop(ctx.currentTime + 0.3);
+
+    // ── 5) 하모니 (장3도 아래, G5부터) ──────────────────
+    [[523.25, 0.75, 0.15], [659.25, 0.90, 0.40], [783.99, 1.23, 0.67]]
+        .forEach(([f, s, d]) => note(f, s, d, 0.11, 'triangle'));
+
+    // ── 6) 베이스 라인 ────────────────────────────────────
+    [[130.81, 0.45, 0.42], [196.00, 0.90, 0.38], [261.63, 1.50, 0.80]]
+        .forEach(([f, s, d]) => note(f, s, d, 0.22, 'triangle'));
+
+    // ── 7) 스네어 액센트 (멜로디 피크에서) ───────────────
+    noiseBurst(0.90, 0.055, 0.28, 2200, 0.6);
+    noiseBurst(1.50, 0.08,  0.38, 1600, 0.7);
+
+    // ── 8) 벨 스파클 (초고음 플럭) ───────────────────────
+    [[4186, 0.90, 0.30], [3520, 1.10, 0.25],
+     [4699, 1.36, 0.25], [4186, 1.50, 0.50], [5274, 1.56, 0.40]]
+        .forEach(([f, s, d]) => note(f, s, d, 0.07));
+
+    // ── 9) 그랜드 피날레 코드 t=1.50 + 리버브 시뮬 ──────
+    [130.81, 261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.5].forEach(f => {
+        note(f, 1.50, 1.0, 0.09, 'triangle'); // 메인 히트
+        note(f, 1.57, 0.8, 0.045, 'sine');    // 리버브 테일 1
+        note(f, 1.65, 0.6, 0.022, 'sine');    // 리버브 테일 2
+    });
 }
 
 function haptic(pattern) {
@@ -2145,30 +2312,53 @@ function checkWin() {
 
 function celebrateWin() {
     sfxWin(); haptic([50, 30, 50, 30, 100]);
-    // Stop combo timer
     if (comboTimerId) { clearInterval(comboTimerId); comboTimerId = null; }
-
-    // Add current IQ to total
     totalIQ += iq;
 
-    // 1) Shimmer all filled cells in wave
+    // 1) Screen flash
+    spawnScreenFlash();
+
+    // 2) Grid explode + rainbow wave
+    const gridContainer = document.getElementById('grid-container');
+    gridContainer.classList.add('grid-win-explode');
+    setTimeout(() => gridContainer.classList.remove('grid-win-explode'), 700);
+
     const filledCells = gridEl.querySelectorAll('.cell.filled');
     filledCells.forEach((cell, i) => {
-        cell.style.setProperty('--sd', (i * 30) + 'ms');
-        cell.classList.add('win-shimmer');
+        cell.style.setProperty('--sd', (i * 18) + 'ms');
+        cell.classList.add('rainbow-wave');
     });
 
-    // 2) Confetti rain
-    spawnConfetti();
-    setTimeout(spawnConfetti, 800);
-    setTimeout(spawnConfetti, 1600);
+    // 3) Shockwave rings from grid center
+    const gridRect = gridEl.getBoundingClientRect();
+    const cx = gridRect.left + gridRect.width / 2;
+    const cy = gridRect.top + gridRect.height / 2;
+    spawnShockwaves(cx, cy);
 
-    // 3) Fireworks
-    setTimeout(() => spawnFireworks(window.innerWidth * 0.3, window.innerHeight * 0.3), 300);
-    setTimeout(() => spawnFireworks(window.innerWidth * 0.7, window.innerHeight * 0.25), 700);
-    setTimeout(() => spawnFireworks(window.innerWidth * 0.5, window.innerHeight * 0.4), 1100);
+    // 4) Sparkles burst from grid
+    spawnSparkles(cx, cy);
 
-    // 4) Show overlay after short delay
+    // 5) Shooting stars
+    setTimeout(spawnShootingStars, 100);
+
+    // 6) Massive confetti — 6 batches
+    for (let i = 0; i < 6; i++) setTimeout(spawnConfetti, i * 350);
+
+    // 7) 12 firework bursts spread across 2.4 s
+    const fwPos = [
+        [0.2,0.2],[0.8,0.2],[0.5,0.1],
+        [0.15,0.5],[0.85,0.45],[0.5,0.5],
+        [0.3,0.7],[0.7,0.65],[0.1,0.3],
+        [0.9,0.3],[0.4,0.15],[0.6,0.15],
+    ];
+    fwPos.forEach(([fx, fy], i) =>
+        setTimeout(() => spawnFireworks(window.innerWidth*fx, window.innerHeight*fy), 150 + i * 200)
+    );
+
+    // 8) Floating text particles
+    spawnFloatingTexts();
+
+    // 9) Show overlay
     const stars = calcStars();
     setTimeout(() => {
         const overlay = document.getElementById('win-overlay');
@@ -2181,49 +2371,168 @@ function celebrateWin() {
             comboMaxThisLevel >= 2 ? `최대 콤보: x${comboMaxThisLevel}` : '';
         document.getElementById('total-iq').textContent = `총 IQ: ${totalIQ}`;
         overlay.classList.add('show');
-    }, 1200);
+    }, 2200);
 }
 
 function getDifficultyLabel(diff) {
     return { easy: '쉬움', normal: '보통', hard: '어려움' }[diff] || diff;
 }
 
+function spawnScreenFlash() {
+    const el = document.createElement('div');
+    el.classList.add('win-flash');
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 700);
+}
+
+function spawnShockwaves(cx, cy) {
+    const configs = [
+        { color: 'rgba(255,241,100,0.9)', bw: 5, delay: 0,   dur: 0.7, scale: 90 },
+        { color: 'rgba(255,100,200,0.7)', bw: 3, delay: 200, dur: 0.8, scale: 110 },
+        { color: 'rgba(100,220,255,0.6)', bw: 2, delay: 400, dur: 0.9, scale: 130 },
+    ];
+    configs.forEach(cfg => {
+        const el = document.createElement('div');
+        el.classList.add('shockwave');
+        el.style.left = cx + 'px'; el.style.top = cy + 'px';
+        el.style.width = '10px'; el.style.height = '10px';
+        el.style.border = `${cfg.bw}px solid ${cfg.color}`;
+        el.style.setProperty('--scale', cfg.scale);
+        el.style.setProperty('--dur', cfg.dur + 's');
+        el.style.setProperty('--delay', cfg.delay + 'ms');
+        setTimeout(() => document.body.appendChild(el), cfg.delay);
+        setTimeout(() => el.remove(), cfg.delay + 2000);
+    });
+}
+
+function spawnSparkles(cx, cy) {
+    const colors = ['#ffd700','#fff176','#ffffff','#ff6f00','#00e5ff','#f06292','#69f0ae'];
+    for (let i = 0; i < 60; i++) {
+        const el = document.createElement('div');
+        el.classList.add('sparkle');
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 40 + Math.random() * 220;
+        const size = 7 + Math.random() * 14;
+        el.style.left = cx + 'px'; el.style.top = cy + 'px';
+        el.style.width = size + 'px'; el.style.height = size + 'px';
+        el.style.background = colors[Math.floor(Math.random() * colors.length)];
+        el.style.setProperty('--tx', (Math.cos(angle) * dist) + 'px');
+        el.style.setProperty('--ty', (Math.sin(angle) * dist) + 'px');
+        el.style.setProperty('--rot', (Math.random() * 900 - 450) + 'deg');
+        el.style.setProperty('--dur', (0.5 + Math.random() * 0.8) + 's');
+        el.style.setProperty('--delay', (Math.random() * 0.35) + 's');
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+    }
+}
+
+function spawnShootingStars() {
+    const colors = ['#ffffff','#fff176','#ff6f00','#00e5ff','#f06292'];
+    for (let i = 0; i < 18; i++) {
+        const el = document.createElement('div');
+        el.classList.add('shooting-star');
+        const startX = Math.random() * 110 - 5;
+        const startY = Math.random() * 80 + 5;
+        const angle = 15 + Math.random() * 35;
+        const len = 80 + Math.random() * 160;
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        el.style.left = startX + 'vw';
+        el.style.top = startY + 'vh';
+        el.style.width = len + 'px';
+        el.style.transform = `rotate(${angle}deg)`;
+        el.style.background = `linear-gradient(90deg, transparent, ${color}, transparent)`;
+        el.style.setProperty('--tx', (-len * 1.5 * Math.cos(angle * Math.PI / 180)) + 'px');
+        el.style.setProperty('--dur', (0.25 + Math.random() * 0.35) + 's');
+        el.style.setProperty('--delay', (Math.random() * 1.8) + 's');
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+    }
+}
+
+function spawnFloatingTexts() {
+    const items = [
+        { t: 'CLEAR!',   c: '#ff6f00', fs: 32 },
+        { t: '완성!',    c: '#f06292', fs: 28 },
+        { t: '🎉',       c: '#fff',    fs: 36 },
+        { t: '✨',       c: '#ffd700', fs: 34 },
+        { t: 'AMAZING!', c: '#00e5ff', fs: 26 },
+        { t: '🏆',       c: '#fff',    fs: 36 },
+        { t: '🌟',       c: '#ffd700', fs: 34 },
+        { t: 'PERFECT!', c: '#69f0ae', fs: 24 },
+        { t: '🎊',       c: '#fff',    fs: 36 },
+        { t: '최고!',    c: '#ff4081', fs: 28 },
+    ];
+    items.forEach((item, i) => {
+        setTimeout(() => {
+            const el = document.createElement('div');
+            el.classList.add('float-text');
+            el.textContent = item.t;
+            el.style.left = (8 + Math.random() * 82) + 'vw';
+            el.style.top = (15 + Math.random() * 65) + 'vh';
+            el.style.fontSize = item.fs + 'px';
+            el.style.color = item.c;
+            const r0 = (Math.random() * 20 - 10) + 'deg';
+            const r1 = (Math.random() * 10 - 5) + 'deg';
+            const r2 = (Math.random() * 16 - 8) + 'deg';
+            el.style.setProperty('--dur', (1.0 + Math.random() * 0.6) + 's');
+            el.style.setProperty('--delay', '0s');
+            el.style.setProperty('--r0', r0);
+            el.style.setProperty('--r1', r1);
+            el.style.setProperty('--r2', r2);
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 4000);
+        }, i * 120);
+    });
+}
+
 function spawnConfetti() {
-    const colors = ['#f44336','#e91e63','#9c27b0','#3f51b5','#03a9f4','#4caf50','#ffeb3b','#ff9800','#ff5722','#8bc34a'];
+    const colors = ['#f44336','#e91e63','#9c27b0','#3f51b5','#03a9f4','#4caf50','#ffeb3b','#ff9800','#ff5722','#8bc34a','#ffd700','#00bcd4','#ff1744','#76ff03'];
     const shapes = ['square','circle','ribbon'];
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 80; i++) {
         const el = document.createElement('div');
         el.classList.add('confetti');
         const shape = shapes[Math.floor(Math.random()*shapes.length)];
-        const size = 6 + Math.random() * 10;
+        const size = 5 + Math.random() * 14;
         el.style.left = Math.random()*100+'vw';
         el.style.top = '-20px';
-        el.style.width = (shape === 'ribbon' ? size*0.4 : size) + 'px';
-        el.style.height = (shape === 'ribbon' ? size*2.5 : size) + 'px';
-        el.style.borderRadius = shape === 'circle' ? '50%' : shape === 'ribbon' ? '2px' : '0';
+        el.style.width = (shape === 'ribbon' ? size*0.35 : size) + 'px';
+        el.style.height = (shape === 'ribbon' ? size*3.2 : size) + 'px';
+        el.style.borderRadius = shape === 'circle' ? '50%' : shape === 'ribbon' ? '2px' : '2px';
         el.style.background = colors[Math.floor(Math.random()*colors.length)];
-        el.style.setProperty('--dur', (2 + Math.random()*2) + 's');
-        el.style.setProperty('--delay', (Math.random()*1) + 's');
-        el.style.setProperty('--rot', (360 + Math.random()*720) + 'deg');
+        el.style.setProperty('--dur', (2.5 + Math.random()*2.5) + 's');
+        el.style.setProperty('--delay', (Math.random()*0.6) + 's');
+        el.style.setProperty('--rot', (540 + Math.random()*1080) + 'deg');
         document.body.appendChild(el);
-        setTimeout(() => el.remove(), 5000);
+        setTimeout(() => el.remove(), 7000);
     }
 }
 
 function spawnFireworks(cx, cy) {
-    const colors = ['#ff0','#f44','#4cf','#f4f','#4f4','#fa0','#fff'];
-    for (let i = 0; i < 30; i++) {
+    const palettes = [
+        ['#ff0','#ff8c00','#fff176','#fff'],
+        ['#f44','#ff8a80','#ffcdd2','#fff'],
+        ['#4cf','#00e5ff','#b3e5fc','#fff'],
+        ['#f4f','#ea80fc','#f8bbd0','#fff'],
+        ['#4f4','#69f0ae','#b9f6ca','#fff'],
+        ['#ffd700','#ff6f00','#fff176','#fff'],
+    ];
+    const palette = palettes[Math.floor(Math.random() * palettes.length)];
+    const count = 45 + Math.floor(Math.random() * 20);
+    for (let i = 0; i < count; i++) {
         const el = document.createElement('div');
         el.classList.add('firework');
-        const angle = (Math.PI * 2 * i) / 30 + (Math.random() - 0.5) * 0.3;
-        const dist = 60 + Math.random() * 100;
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+        const dist = 90 + Math.random() * 180;
+        const size = 3 + Math.random() * 5;
+        const color = palette[Math.floor(Math.random() * palette.length)];
         el.style.left = cx + 'px'; el.style.top = cy + 'px';
-        el.style.background = colors[Math.floor(Math.random()*colors.length)];
-        el.style.boxShadow = `0 0 6px ${el.style.background}`;
+        el.style.width = size + 'px'; el.style.height = size + 'px';
+        el.style.background = color;
+        el.style.boxShadow = `0 0 ${size*2}px ${color}, 0 0 ${size}px ${color}`;
         el.style.setProperty('--bx', Math.cos(angle)*dist + 'px');
         el.style.setProperty('--by', Math.sin(angle)*dist + 'px');
-        el.style.setProperty('--bdur', (0.5 + Math.random()*0.5) + 's');
-        el.style.setProperty('--bdelay', (Math.random()*0.2) + 's');
+        el.style.setProperty('--bdur', (0.6 + Math.random()*0.7) + 's');
+        el.style.setProperty('--bdelay', (Math.random()*0.25) + 's');
         document.body.appendChild(el);
         setTimeout(() => el.remove(), 3000);
     }
