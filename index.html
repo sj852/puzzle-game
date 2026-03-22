@@ -1896,8 +1896,8 @@ function renderPieces() {
         wrapper.addEventListener('touchstart', e => startDrag(e, idx), { passive: false });
         piecesEl.appendChild(wrapper);
     });
-    // 조각 렌더 후 실제 높이 기반으로 그리드 크기 재계산
-    requestAnimationFrame(updateGridSize);
+    // 조각 렌더 후 실제 높이 기반으로 그리드 크기 재계산 (2프레임 대기로 레이아웃 안정화)
+    requestAnimationFrame(() => requestAnimationFrame(updateGridSize));
 }
 
 // ===================== DRAG & DROP =====================
@@ -2446,7 +2446,6 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const newDiff = btn.dataset.diff;
         if (newDiff !== currentDifficulty) {
-            if (!confirm(`난이도를 변경하면 레벨이 초기화됩니다. 계속하시겠습니까?`)) return;
             currentLevel = { easy: 1, normal: 6, hard: 13 }[newDiff];
             totalIQ = 0;
             usedShapes = { easy: [], normal: [], hard: [] };
@@ -2483,6 +2482,9 @@ currentDifficulty = getDifficultyForLevel(currentLevel);
 currentShapeKey = getShapeForLevel(currentLevel);
 loadShape();
 newGame();
+// 폰트·CSS 완전 적용 후 그리드 크기 재보정 (초기 레이아웃 불안정 대비)
+setTimeout(updateGridSize, 100);
+setTimeout(updateGridSize, 400);
 </script>
 </body>
 </html>
