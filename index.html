@@ -6,16 +6,17 @@
     <title>블록 퍼즐</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html { height: 100dvh; overflow: hidden; }
+        html { height: 100%; }
         body {
             font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #e8f0fe, #d0e0ff);
-            height: 100dvh;
+            min-height: 100dvh;
             display: flex;
             flex-direction: column;
             align-items: center;
             user-select: none;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
             overscroll-behavior: none;
         }
         h1 { margin-top: 15px; font-size: 26px; color: #1a237e; }
@@ -242,6 +243,45 @@
         }
         #hint-btn { background: #ffc107; color: #333; }
         #hint-btn:disabled { background: #ccc; cursor: default; }
+        #shape-selector { display: none; }
+
+        /* 좌측 상단 고정 버튼 */
+        #shape-picker-btn {
+            position: fixed; top: 10px; left: 10px; z-index: 600;
+            background: white; border: 2px solid #3f51b5; border-radius: 12px;
+            padding: 5px 10px; font-size: 22px; cursor: pointer;
+            box-shadow: 0 2px 8px rgba(63,81,181,0.25);
+            display: flex; align-items: center; gap: 5px;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        #shape-picker-btn:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(63,81,181,0.35); }
+        #shape-picker-btn:active { transform: scale(0.96); }
+        #shape-picker-btn .picker-arrow { font-size: 10px; color: #3f51b5; }
+
+        /* 팝업 오버레이 */
+        #shape-popup {
+            display: none; position: fixed; inset: 0; z-index: 5000;
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+            justify-content: center; align-items: center;
+        }
+        #shape-popup.show { display: flex; animation: overlayIn 0.25s ease-out; }
+        #shape-popup-box {
+            background: white; border-radius: 18px; padding: 22px 24px 18px;
+            max-width: 92vw; max-height: 78vh; overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: winBoxIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        #shape-popup-title {
+            font-size: 17px; font-weight: bold; color: #1a237e;
+            margin-bottom: 14px; text-align: center;
+        }
+        #shape-popup-close {
+            display: block; margin: 16px auto 0; padding: 9px 32px;
+            background: linear-gradient(135deg, #3f51b5, #1a237e);
+            color: white; border: none; border-radius: 10px;
+            font-size: 14px; font-weight: bold; cursor: pointer; transition: transform 0.1s;
+        }
+        #shape-popup-close:hover { transform: scale(1.03); }
         #mute-btn { background: #607d8b; color: white; }
         #mute-btn.muted { background: #90a4ae; opacity: 0.7; }
         .cell.hint-highlight {
@@ -320,6 +360,21 @@
     </style>
 </head>
 <body>
+    <!-- 좌측 상단 고정 퍼즐 선택 버튼 -->
+    <button id="shape-picker-btn">
+        <span class="picker-icon">🧩</span>
+        <span class="picker-arrow">▼</span>
+    </button>
+
+    <!-- 퍼즐 선택 팝업 -->
+    <div id="shape-popup">
+        <div id="shape-popup-box">
+            <div id="shape-popup-title">퍼즐 모양 선택</div>
+            <!-- buildShapeSelector()가 여기에 tier-row 삽입 -->
+            <button id="shape-popup-close">닫기</button>
+        </div>
+    </div>
+
     <h1>블록 퍼즐</h1>
     <div id="top-info">
         <div id="level-badge">Lv.1</div>
@@ -1359,22 +1414,10 @@ function applyPieceCellBorder(cell, shape, r, c) {
 
 // ===================== SHAPE SELECTOR =====================
 function buildShapeSelector() {
-    const sel = document.getElementById('shape-selector');
-    sel.innerHTML = '';
-
-    // Toggle button (visible only on mobile via CSS)
-    const toggle = document.createElement('div');
-    toggle.id = 'shape-toggle';
-    toggle.innerHTML = `<span class="toggle-icon">${SHAPES[currentShapeKey].icon}</span><span class="toggle-name">${SHAPES[currentShapeKey].name}</span><span class="toggle-arrow">▼</span>`;
-    toggle.addEventListener('click', () => {
-        toggle.classList.toggle('open');
-        document.getElementById('shape-tiers').classList.toggle('open');
-    });
-    sel.appendChild(toggle);
-
-    // Tiers container
-    const tiersEl = document.createElement('div');
-    tiersEl.id = 'shape-tiers';
+    const box = document.getElementById('shape-popup-box');
+    // 기존 tier-row 제거 후 재빌드
+    box.querySelectorAll('.tier-row').forEach(r => r.remove());
+    const closeBtn = document.getElementById('shape-popup-close');
 
     const tiers = [
         { key: 'easy', label: '쉬움' },
@@ -1402,24 +1445,25 @@ function buildShapeSelector() {
                 loadShape();
                 newGame();
                 updateShapeToggle();
-                // Auto-close on mobile after selection
-                if (window.innerWidth <= 480) {
-                    toggle.classList.remove('open');
-                    document.getElementById('shape-tiers').classList.remove('open');
-                }
+                closeShapePopup();
             });
             row.appendChild(btn);
         }
-        tiersEl.appendChild(row);
+        box.insertBefore(row, closeBtn);
     });
-    sel.appendChild(tiersEl);
 }
 
 function updateShapeToggle() {
-    const toggle = document.getElementById('shape-toggle');
-    if (!toggle) return;
-    toggle.querySelector('.toggle-icon').textContent = SHAPES[currentShapeKey].icon;
-    toggle.querySelector('.toggle-name').textContent = SHAPES[currentShapeKey].name;
+    const btn = document.getElementById('shape-picker-btn');
+    if (btn) btn.querySelector('.picker-icon').textContent = SHAPES[currentShapeKey].icon;
+}
+
+function openShapePopup() {
+    document.getElementById('shape-popup').classList.add('show');
+}
+
+function closeShapePopup() {
+    document.getElementById('shape-popup').classList.remove('show');
 }
 
 // ===================== GRID =====================
@@ -2371,6 +2415,11 @@ function nextLevel() {
     updateShapeToggle();
 }
 
+document.getElementById('shape-picker-btn').addEventListener('click', openShapePopup);
+document.getElementById('shape-popup-close').addEventListener('click', closeShapePopup);
+document.getElementById('shape-popup').addEventListener('click', e => {
+    if (e.target === document.getElementById('shape-popup')) closeShapePopup();
+});
 document.getElementById('mute-btn').addEventListener('click', () => {
     audioMuted = !audioMuted;
     const btn = document.getElementById('mute-btn');
