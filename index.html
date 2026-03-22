@@ -240,6 +240,8 @@
         }
         #hint-btn { background: #ffc107; color: #333; }
         #hint-btn:disabled { background: #ccc; cursor: default; }
+        #mute-btn { background: #607d8b; color: white; }
+        #mute-btn.muted { background: #90a4ae; opacity: 0.7; }
         .cell.hint-highlight {
             animation: hintBlink 0.5s ease-in-out 5;
             z-index: 10; position: relative;
@@ -335,6 +337,7 @@
         <button id="undo-btn">↩ 되돌리기</button>
         <button id="reset-btn">다시 시작</button>
         <button id="new-btn">새 퍼즐</button>
+        <button id="mute-btn">🔊 소리</button>
     </div>
     <div id="drag-ghost"></div>
     <div id="combo-popup"></div>
@@ -1149,6 +1152,148 @@ function starsToText(stars) {
     return '★'.repeat(stars) + '☆'.repeat(3 - stars);
 }
 
+// ===================== AUDIO =====================
+let audioCtx = null;
+let audioMuted = false;
+
+function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+}
+
+function sfxPickup() {
+    if (audioMuted) return;
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(350, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(500, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.08);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.08);
+}
+
+function sfxPlace() {
+    if (audioMuted) return;
+    const ctx = getAudioCtx();
+    [480, 720].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.07);
+        osc.start(ctx.currentTime + i * 0.03);
+        osc.stop(ctx.currentTime + i * 0.03 + 0.07);
+    });
+}
+
+function sfxInvalid() {
+    if (audioMuted) return;
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(130, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(90, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.12);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.12);
+}
+
+function sfxCombo(n) {
+    if (audioMuted) return;
+    const ctx = getAudioCtx();
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5]; // C5 E5 G5 C6 E6
+    const count = Math.min(n, notes.length);
+    for (let i = 0; i < count; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(notes[i], ctx.currentTime + i * 0.1);
+        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.1);
+        gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.1 + 0.01);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + i * 0.1 + 0.12);
+        osc.start(ctx.currentTime + i * 0.1);
+        osc.stop(ctx.currentTime + i * 0.1 + 0.12);
+    }
+}
+
+function sfxHint() {
+    if (audioMuted) return;
+    const ctx = getAudioCtx();
+    [880, 1108].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.15);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + i * 0.15 + 0.18);
+        osc.start(ctx.currentTime + i * 0.15);
+        osc.stop(ctx.currentTime + i * 0.15 + 0.18);
+    });
+}
+
+function sfxUndo() {
+    if (audioMuted) return;
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(500, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(220, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.15);
+}
+
+function sfxWin() {
+    if (audioMuted) return;
+    const ctx = getAudioCtx();
+    // Fanfare: C5-E5-G5-C6-E5-C6-E6
+    const melody = [
+        { freq: 523.25, t: 0.00, dur: 0.12 },
+        { freq: 659.25, t: 0.12, dur: 0.12 },
+        { freq: 783.99, t: 0.24, dur: 0.12 },
+        { freq: 1046.5, t: 0.36, dur: 0.18 },
+        { freq: 659.25, t: 0.54, dur: 0.12 },
+        { freq: 1046.5, t: 0.66, dur: 0.12 },
+        { freq: 1318.5, t: 0.78, dur: 0.30 },
+    ];
+    melody.forEach(({ freq, t, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + t);
+        gain.gain.setValueAtTime(0.18, ctx.currentTime + t);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + t + dur);
+        osc.start(ctx.currentTime + t);
+        osc.stop(ctx.currentTime + t + dur);
+    });
+    // Low bass thump
+    const bass = ctx.createOscillator();
+    const bassGain = ctx.createGain();
+    bass.connect(bassGain); bassGain.connect(ctx.destination);
+    bass.type = 'sine';
+    bass.frequency.setValueAtTime(80, ctx.currentTime);
+    bass.frequency.linearRampToValueAtTime(50, ctx.currentTime + 0.3);
+    bassGain.gain.setValueAtTime(0.3, ctx.currentTime);
+    bassGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+    bass.start(ctx.currentTime);
+    bass.stop(ctx.currentTime + 0.3);
+}
+
 // ===================== GAME STATE =====================
 let grid = [], pieces = [], iq = IQ_BASE, filledCount = 0;
 let storedSolution = null; // stored solution from generation for reliable hints
@@ -1686,6 +1831,7 @@ function renderPieces() {
 // ===================== DRAG & DROP =====================
 function startDrag(e, idx) {
     e.preventDefault();
+    sfxPickup();
     draggingPiece = pieces[idx]; draggingIdx = idx;
     const wrapper = e.currentTarget.closest('.piece-wrapper');
     if (wrapper) wrapper.classList.add('dragging');
@@ -1798,6 +1944,7 @@ function onDragEnd(e) {
     const sc = pos.col - Math.floor(shape[0].length / 2);
 
     if (canPlace(shape, sr, sc)) {
+        sfxPlace();
         placePiece(shape, sr, sc, draggingIdx);
         pieces[draggingIdx].placed = true;
         history.push(draggingIdx);
@@ -1811,8 +1958,11 @@ function onDragEnd(e) {
         const comboMultiplier = combo >= 2 ? combo : 1;
         iq += baseBonus * comboMultiplier;
         iqEl.textContent = iq;
+        if (combo >= 2) sfxCombo(combo);
 
         updatePieceCount(); renderPieces(); checkWin();
+    } else {
+        sfxInvalid();
     }
 
     document.querySelectorAll('.piece-wrapper.dragging').forEach(el => el.classList.remove('dragging'));
@@ -1944,6 +2094,7 @@ function checkWin() {
 }
 
 function celebrateWin() {
+    sfxWin();
     // Stop combo timer
     if (comboTimerId) { clearInterval(comboTimerId); comboTimerId = null; }
 
@@ -2108,6 +2259,7 @@ function giveHint() {
     }
 
     // Deduct IQ + track usage
+    sfxHint();
     iq = Math.max(IQ_BASE, iq - HINT_PENALTY);
     iqEl.textContent = iq;
     hintUsedCount++;
@@ -2147,6 +2299,7 @@ function updateUndoBtn() {
 
 function undoLast() {
     if (history.length === 0) return;
+    sfxUndo();
     const pidx = history.pop();
     removePieceFromGrid(pidx, false);
     // Apply undo penalty
@@ -2190,6 +2343,12 @@ function nextLevel() {
     updateShapeToggle();
 }
 
+document.getElementById('mute-btn').addEventListener('click', () => {
+    audioMuted = !audioMuted;
+    const btn = document.getElementById('mute-btn');
+    btn.textContent = audioMuted ? '🔇 음소거' : '🔊 소리';
+    btn.classList.toggle('muted', audioMuted);
+});
 document.getElementById('hint-btn').addEventListener('click', giveHint);
 document.getElementById('undo-btn').addEventListener('click', undoLast);
 document.getElementById('reset-btn').addEventListener('click', resetGame);
