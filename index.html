@@ -6,16 +6,17 @@
     <title>블록 퍼즐</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html { height: 100%; }
+        html { height: 100dvh; overflow: hidden; }
         body {
             font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #e8f0fe, #d0e0ff);
-            min-height: 100dvh;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
             align-items: center;
             user-select: none;
-            overflow-x: hidden;
+            overflow: hidden;
+            overscroll-behavior: none;
         }
         h1 { margin-top: 15px; font-size: 26px; color: #1a237e; }
 
@@ -256,7 +257,6 @@
             border: 2px solid #ffc107;
         }
         @media (max-width: 480px) {
-            body { height: 100dvh; overflow: hidden; }
             h1 { font-size: 18px; margin-top: 4px; }
             #top-info { margin: 2px 0 0; gap: 8px; }
             #level-badge { font-size: 14px; padding: 2px 10px; }
@@ -280,13 +280,13 @@
             #game-area { margin: 4px auto; }
             #grid-container { padding: 1px; }
             #piece-count { font-size: 12px; margin-bottom: 2px; }
-            #pieces-area { gap: 6px; margin: 4px auto; padding: 4px; max-height: 20vh; overflow-y: auto; }
+            #pieces-area { gap: 6px; margin: 2px auto; padding: 4px; max-height: 18vh; overflow-y: auto; }
             .piece-wrapper { padding: 4px; border-radius: 8px; }
             .piece-wrapper:hover { transform: none; }
             .piece-label { font-size: 9px; margin-top: 2px; }
             #difficulty { gap: 6px; margin: 3px 0 4px; }
             .diff-btn { padding: 4px 12px; font-size: 12px; }
-            #buttons { flex-wrap: wrap; gap: 5px; justify-content: center; margin: 4px 0 12px; }
+            #buttons { flex-wrap: wrap; gap: 5px; justify-content: center; margin: 4px 0; }
             button { padding: 6px 12px; font-size: 12px; }
             #win-box { padding: 20px 20px; margin: 0 16px; max-width: calc(100vw - 32px); }
             #win-box .win-title { font-size: 22px; }
@@ -1501,10 +1501,20 @@ function onGridCellDown(e) {
 
 function getCellSize() {
     const vw = window.innerWidth;
-    const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     const csFromWidth = Math.floor(Math.min(vw - 20, 500) / COLS);
-    // Reserve ~57% of viewport height for non-grid UI (title, score, pieces, buttons...)
-    const csFromHeight = Math.floor((vh * 0.43) / ROWS);
+
+    // Measure actual heights of all non-grid body elements
+    let usedH = 0;
+    document.querySelectorAll('body > *').forEach(el => {
+        if (['game-area','drag-ghost','combo-popup','win-overlay'].includes(el.id)) return;
+        const h = el.getBoundingClientRect().height;
+        // pieces-area may be empty on first call — use max-height estimate as fallback
+        usedH += (el.id === 'pieces-area' && h < 4) ? Math.floor(vh * 0.18) : h;
+    });
+    // 20px buffer for inter-element margins
+    const availH = Math.max(0, vh - usedH - 20);
+    const csFromHeight = ROWS > 0 ? Math.floor(availH / ROWS) : 30;
     return Math.max(14, Math.min(csFromWidth, csFromHeight, 30));
 }
 
